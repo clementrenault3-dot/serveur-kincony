@@ -213,6 +213,12 @@ async function verifierPluieGlobal() {
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${infos.lat}&longitude=${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
       const reponse = await fetch(url);
+      
+      // NOUVEAUTÉ : On intercepte les refus de l'API Open-Météo
+      if (!reponse.ok) {
+        throw new Error(`Open-Météo a refusé la connexion (Code erreur HTTP : ${reponse.status})`);
+      }
+
       const data = await reponse.json();
 
       const heureActuelle = new Date().getTime();
@@ -226,7 +232,7 @@ async function verifierPluieGlobal() {
 
       console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus sur 48h.`);
 
-      // ⚠️ SEUIL DE TEST À -1. Remettez-le à 10 après votre test !
+      // ⚠️ SEUIL DE TEST À -1. Remettez-le à 10 après vos tests !
       if (pluieTotale > -1) {
         
         // Sécurité anti-boucle : on vérifie si le relais 1 est DÉJÀ allumé
@@ -254,7 +260,8 @@ async function verifierPluieGlobal() {
       }
 
     } catch (erreur) {
-      console.error(`[Erreur Météo] Impossible de joindre l'API pour ${nom}`);
+      // NOUVEAUTÉ : Affichage détaillé de l'erreur
+      console.error(`[Erreur Météo] Problème avec ${nom} :`, erreur.message);
     }
   }
 }
@@ -262,7 +269,4 @@ async function verifierPluieGlobal() {
 // Vérification toutes les heures
 setInterval(verifierPluieGlobal, 3600000);
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log('Serveur centralisé en ligne sur le port ' + PORT);
-});
+const PORT = process.env.PORT ||
