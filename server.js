@@ -9,8 +9,6 @@ const wss = new WebSocket.Server({ server });
 const CODE_SECRET = "1234";
 
 // --- NOTRE REGISTRE DE CARTES ---
-// Il stockera les informations sous cette forme : 
-// "Maison_Fletre" => { ws: objet_connexion, lat: "50.75", lon: "2.61", etat: 0 }
 const registreCartes = new Map();
 
 // --- 1. L'INTERFACE WEB (TABLEAU DE BORD) ---
@@ -63,14 +61,11 @@ app.get('/', (req, res) => {
         codePin = document.getElementById('pin-input').value;
         document.getElementById('ecran-login').style.display = 'none';
         document.getElementById('ecran-app').style.display = 'block';
-        // Demande au serveur la liste des cartes dès qu'on se connecte
         ws.send("GET_DASHBOARD"); 
       }
 
-      // Quand le serveur nous envoie des informations
       ws.onmessage = (event) => {
         const msg = event.data;
-        // Si le message ressemble à du JSON (c'est notre mise à jour de tableau de bord)
         if (msg.startsWith("{")) {
             const data = JSON.parse(msg);
             if (data.type === "UPDATE") {
@@ -79,7 +74,6 @@ app.get('/', (req, res) => {
         }
       };
 
-      // Construit dynamiquement l'interface en fonction des cartes branchées
       function majAffichageCartes(listeCartes) {
         let html = '';
         if (listeCartes.length === 0) {
@@ -111,7 +105,6 @@ app.get('/', (req, res) => {
         document.getElementById('cartes-container').innerHTML = html;
       }
 
-      // Le format d'envoi est maintenant : PIN-NomCarte-R1_ON
       function envoyerOrdre(nomCarte, numeroRelais, action) { 
         if(ws.readyState === WebSocket.OPEN) {
             ws.send(codePin + "-" + nomCarte + "-R" + numeroRelais + "_" + action); 
@@ -121,27 +114,25 @@ app.get('/', (req, res) => {
       }
     </script>
   </body>
-  </html>`;
+  </html>
+  `;
   res.send(html);
 });
-
 
 // --- 2. GESTION DES COMMUNICATIONS WEBSOCKETS ---
 wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     const data = message.toString();
 
-    // A. Une carte se présente (INIT:Maison_Fletre:50.75:2.61)
     if (data.startsWith("INIT:")) {
       const parts = data.split(":");
       if (parts.length >= 4) {
         const nom = parts[1];
         registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], etat: 0 });
-        console.log(\`[Nouvelle Carte] \${nom} enregistrée aux coordonnées \${parts[2]}, \${parts[3]}\`);
+        console.log(`[Nouvelle Carte] ${nom} enregistrée aux coordonnées ${parts[2]}, ${parts[3]}`);
         diffuserMiseAJourWeb();
       }
     } 
-    // B. Une carte envoie son état (STATE:Maison_Fletre:1)
     else if (data.startsWith("STATE:")) {
       const parts = data.split(":");
       if (parts.length >= 3) {
@@ -149,28 +140,25 @@ wss.on('connection', (ws) => {
         const etat = parseInt(parts[2]);
         if (registreCartes.has(nom)) {
           registreCartes.get(nom).etat = etat;
-          registreCartes.get(nom).ws = ws; // Met à jour le "tuyau" au cas où elle se serait reconnectée
+          registreCartes.get(nom).ws = ws; 
           diffuserMiseAJourWeb();
         }
       }
     }
-    // C. Le navigateur demande à rafraîchir l'écran
     else if (data === "GET_DASHBOARD") {
       diffuserMiseAJourWeb();
     }
-    // D. Le navigateur envoie un ordre manuel sécurisé (1234-Maison_Fletre-R1_ON)
     else if (data.startsWith(CODE_SECRET + "-")) {
       const parts = data.split("-");
       if (parts.length >= 3) {
         const cible = parts[1];
-        const ordre = parts[2]; // ex: R1_ON
+        const ordre = parts[2]; 
         
-        // On cherche la bonne carte dans le registre et on lui transmet l'ordre
         if (registreCartes.has(cible)) {
           const carteWs = registreCartes.get(cible).ws;
           if (carteWs && carteWs.readyState === WebSocket.OPEN) {
             carteWs.send(ordre);
-            console.log(\`[Ordre Manuel] Action \${ordre} transmise à \${cible}\`);
+            console.log(`[Ordre Manuel] Action ${ordre} transmise à ${cible}`);
           }
         }
       }
@@ -178,7 +166,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Prépare un résumé de l'annuaire au format JSON et l'envoie à tous les téléphones/navigateurs connectés
 function diffuserMiseAJourWeb() {
   const resume = [];
   for (const [nom, infos] of registreCartes.entries()) {
@@ -189,26 +176,22 @@ function diffuserMiseAJourWeb() {
   
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(json); // La puce ESP32 ignorera ce message car il ne commence pas par "R"
+      client.send(json); 
     }
   });
 }
-
 
 // --- 3. LE CERVEAU MÉTÉO AUTOMATISÉ ---
 async function verifierPluieGlobal() {
   console.log("[Météo] Début de la tournée d'inspection pour toutes les cartes...");
   
-  // Le serveur parcourt son annuaire de cartes une par une
   for (const [nom, infos] of registreCartes.entries()) {
-    // Inutile de vérifier la météo si la carte est débranchée
     if (!infos.ws || infos.ws.readyState !== WebSocket.OPEN) {
       continue; 
     }
 
     try {
-      // On utilise les coordonnées spécifiques (lat/lon) de la carte en cours
-      const url = \`https://api.open-meteo.com/v1/forecast?latitude=\${infos.lat}&longitude=\${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3\`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${infos.lat}&longitude=${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
       const reponse = await fetch(url);
       const data = await reponse.json();
 
@@ -221,29 +204,25 @@ async function verifierPluieGlobal() {
         pluieTotale += data.hourly.precipitation[i];
       }
 
-      console.log(\`[Météo] \${nom} : \${pluieTotale.toFixed(1)} mm prévus sur 48h.\`);
+      console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus sur 48h.`);
 
-      // Prise de décision pour cette carte spécifique
       if (pluieTotale > 10) {
         infos.ws.send("R1_ON");
-        console.log(\`[Alerte Pluie] Allumage R1 pour \${nom}\`);
+        console.log(`[Alerte Pluie] Allumage R1 pour ${nom}`);
       } else {
         infos.ws.send("R1_OFF");
-        console.log(\`[Météo Calme] Extinction R1 pour \${nom}\`);
+        console.log(`[Météo Calme] Extinction R1 pour ${nom}`);
       }
 
     } catch (erreur) {
-      console.error(\`[Erreur Météo] Impossible de joindre l'API pour \${nom}\`);
+      console.error(`[Erreur Météo] Impossible de joindre l'API pour ${nom}`);
     }
   }
 }
 
-// Lancement de la tournée météo toutes les heures
 setInterval(verifierPluieGlobal, 3600000);
-// Lancement initial 10 secondes après le démarrage
 setTimeout(verifierPluieGlobal, 10000);
 
-// Démarrage du serveur web
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log('Serveur centralisé en ligne sur le port ' + PORT);
