@@ -1,7 +1,7 @@
 const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
-const { google } = require('googleapis'); // Ajout du module Google
+const { google } = require('googleapis');
 
 const app = express();
 const server = http.createServer(app);
@@ -30,12 +30,11 @@ async function ecrireHistorique(evenement) {
   if (!authGoogle || !process.env.SPREADSHEET_ID) return;
   try {
     const sheets = google.sheets({ version: 'v4', auth: authGoogle });
-    // Récupère l'heure exacte de Paris
     const dateFR = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
     
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.SPREADSHEET_ID,
-      range: 'Feuille 1!A:B', // Écrit dans les colonnes A et B
+      range: 'Feuille 1!A:B', 
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[dateFR, evenement]] }
     });
@@ -145,6 +144,7 @@ wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     const data = message.toString();
 
+    // A. Une carte se connecte
     if (data.startsWith("INIT:")) {
       const parts = data.split(":");
       if (parts.length >= 4) {
@@ -152,8 +152,12 @@ wss.on('connection', (ws) => {
         registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], etat: 0 });
         console.log(`[Nouvelle Carte] ${nom} connectée.`);
         diffuserMiseAJourWeb();
+        
+        // On vérifie la météo immédiatement à la connexion
+        verifierPluieGlobal();
       }
     } 
+    // B. Une carte met à jour son état
     else if (data.startsWith("STATE:")) {
       const parts = data.split(":");
       if (parts.length >= 3) {
@@ -163,14 +167,14 @@ wss.on('connection', (ws) => {
           registreCartes.get(nom).etat = etat;
           registreCartes.get(nom).ws = ws; 
           diffuserMiseAJourWeb();
-          // DÉCLENCHEMENT IMMÉDIAT : On vérifie la météo dès qu'une carte se branche
-        verifierPluieGlobal();
         }
       }
     }
+    // C. Rafraîchissement du navigateur
     else if (data === "GET_DASHBOARD") {
       diffuserMiseAJourWeb();
     }
+    // D. Ordre manuel depuis l'interface web
     else if (data.startsWith(CODE_SECRET + "-")) {
       const parts = data.split("-");
       if (parts.length >= 3) {
@@ -181,8 +185,6 @@ wss.on('connection', (ws) => {
           const carteWs = registreCartes.get(cible).ws;
           if (carteWs && carteWs.readyState === WebSocket.OPEN) {
             carteWs.send(ordre);
-            
-            // Enregistrement de l'action manuelle dans Google Sheets
             ecrireHistorique(`${cible} : Ordre MANUEL envoyé -> ${ordre}`);
           }
         }
@@ -222,12 +224,33 @@ async function verifierPluieGlobal() {
         pluieTotale += data.hourly.precipitation[i];
       }
 
+      console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus sur 48h.`);
+
+      // ⚠️ SEUIL DE TEST À -1. Remettez-le à 10 après votre test !
       if (pluieTotale > -1) {
-        infos.ws.send("R1_ON");
-        ecrireHistorique(`${nom} : Alerte Pluie (${pluieTotale.toFixed(1)}mm) -> Allumage R1_ON automatique`);
+        
+        // Sécurité anti-boucle : on vérifie si le relais 1 est DÉJÀ allumé
+        const relais1Allume = (infos.etat & 1) !== 0;
+
+        if (!relais1Allume) {
+          infos.ws.send("R1_ON");
+          ecrireHistorique(`${nom} : Alerte Pluie (${pluieTotale.toFixed(1)}mm) -> Allumage automatique`);
+          
+          // On force l'état en mémoire immédiatement pour que le serveur sache qu'il a fait son travail
+          infos.etat = infos.etat | 1; 
+        } else {
+          console.log(`[Info] ${nom} : Alerte météo maintenue, mais le relais est DÉJÀ allumé. On ignore.`);
+        }
+
       } else {
-        infos.ws.send("R1_OFF");
-        // On peut aussi enregistrer les extinctions si on le souhaite, c'est facultatif
+        
+        const relais1Allume = (infos.etat & 1) !== 0;
+        
+        if (relais1Allume) {
+          infos.ws.send("R1_OFF");
+          infos.etat = infos.etat & ~1;
+          ecrireHistorique(`${nom} : Fin de l'alerte pluie -> Extinction automatique`);
+        }
       }
 
     } catch (erreur) {
@@ -236,8 +259,8 @@ async function verifierPluieGlobal() {
   }
 }
 
+// Vérification toutes les heures
 setInterval(verifierPluieGlobal, 3600000);
-setTimeout(verifierPluieGlobal, 10000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
