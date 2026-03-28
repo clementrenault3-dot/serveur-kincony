@@ -220,7 +220,7 @@ async function verifierPluieGlobal() {
         pluieTotale += data.hourly.precipitation[i];
       }
 
-      if (pluieTotale > 1) {
+      if (pluieTotale > -1) {
         infos.ws.send("R1_ON");
         ecrireHistorique(`${nom} : Alerte Pluie (${pluieTotale.toFixed(1)}mm) -> Allumage R1_ON automatique`);
       } else {
