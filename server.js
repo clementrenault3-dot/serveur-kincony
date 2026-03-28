@@ -102,8 +102,8 @@ app.get('/', (req, res) => {
       };
 
       function majAffichageCartes(listeCartes) {
-        let html = '';
-        if (listeCartes.length === 0) html = "<p>Aucune carte n'est actuellement détectée.</p>";
+        let htmlFinal = '';
+        if (listeCartes.length === 0) htmlFinal = "<p>Aucune carte n'est actuellement détectée.</p>";
 
         listeCartes.forEach(carte => {
           const statusClass = carte.enLigne ? "online" : "offline";
@@ -112,21 +112,20 @@ app.get('/', (req, res) => {
           let relaisHtml = '';
           for(let i=1; i<=6; i++) {
             const estOn = (carte.etat & (1 << (i-1)));
-            
-            // NOUVEAUTÉ : On bloque le bouton si la carte est hors ligne
             const etatBouton = carte.enLigne ? '' : 'disabled';
+            const onOffClass = estOn ? 'on' : 'off';
+            const btnClass = estOn ? 'btn-off' : 'btn-on';
+            const textAction = estOn ? 'OFF' : 'ON';
             
-            relaisHtml += \`
-            <div class="card">
-              <span class="indicator \${estOn ? 'on' : 'off'}"></span> R\${i}<br>
-              <button class="\${estOn ? 'btn-off' : 'btn-on'}" \${etatBouton} onclick="envoyerOrdre('\${carte.nom}', '\${i}', '\${estOn ? 'OFF' : 'ON'}')">
-                \${estOn ? 'OFF' : 'ON'}
-              </button>
-            </div>\`;
+            relaisHtml += '<div class="card">' +
+              '<span class="indicator ' + onOffClass + '"></span> R' + i + '<br>' +
+              '<button class="' + btnClass + '" ' + etatBouton + ' onclick="envoyerOrdre(\\'' + carte.nom + '\\', \\'' + i + '\\', \\'' + textAction + '\\')">' + textAction + '</button>' +
+            '</div>';
           }
-          html += \`<div class="carte-section"><div class="status-bar \${statusClass}">Appareil : \${carte.nom.replace(/_/g, ' ')} - \${statusText}</div><div class="container">\${relaisHtml}</div></div>\`;
+          const nomPropre = carte.nom.replace(/_/g, ' ');
+          htmlFinal += '<div class="carte-section"><div class="status-bar ' + statusClass + '">Appareil : ' + nomPropre + ' - ' + statusText + '</div><div class="container">' + relaisHtml + '</div></div>';
         });
-        document.getElementById('cartes-container').innerHTML = html;
+        document.getElementById('cartes-container').innerHTML = htmlFinal;
       }
 
       function envoyerOrdre(nomCarte, numeroRelais, action) { 
@@ -146,12 +145,12 @@ app.get('/', (req, res) => {
 // --- 2. GESTION DES COMMUNICATIONS WEBSOCKETS ---
 wss.on('connection', (ws) => {
   
-  // Gère la déconnexion "propre" (quand le Wi-Fi coupe proprement)
+  // Gère la déconnexion propre du Wi-Fi
   ws.on('close', () => {
     for (const [nom, infos] of registreCartes.entries()) {
       if (infos.ws === ws) {
         infos.ws = null;
-        console.log(\`[Déconnexion] \${nom} a quitté le réseau.\`);
+        console.log(`[Déconnexion] ${nom} a quitté le réseau.`);
         diffuserMiseAJourWeb();
         break;
       }
@@ -161,19 +160,16 @@ wss.on('connection', (ws) => {
   ws.on('message', (message) => {
     const data = message.toString();
 
-    // A. Une carte se connecte
     if (data.startsWith("INIT:")) {
       const parts = data.split(":");
       if (parts.length >= 4) {
         const nom = parts[1];
-        // NOUVEAUTÉ : On enregistre l'heure exacte (derniereVue) de la connexion
         registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], etat: 0, derniereVue: Date.now() });
-        console.log(\`[Nouvelle Carte] \${nom} connectée.\`);
+        console.log(`[Nouvelle Carte] ${nom} connectée.`);
         diffuserMiseAJourWeb();
         verifierPluieGlobal();
       }
     } 
-    // B. Une carte met à jour son état
     else if (data.startsWith("STATE:")) {
       const parts = data.split(":");
       if (parts.length >= 3) {
@@ -182,17 +178,14 @@ wss.on('connection', (ws) => {
         if (registreCartes.has(nom)) {
           registreCartes.get(nom).etat = etat;
           registreCartes.get(nom).ws = ws; 
-          // NOUVEAUTÉ : On rafraîchit le compteur à chaque battement de coeur
           registreCartes.get(nom).derniereVue = Date.now(); 
           diffuserMiseAJourWeb();
         }
       }
     }
-    // C. Rafraîchissement du navigateur
     else if (data === "GET_DASHBOARD") {
       diffuserMiseAJourWeb();
     }
-    // D. Ordre manuel depuis l'interface web
     else if (data.startsWith(CODE_SECRET + "-")) {
       const parts = data.split("-");
       if (parts.length >= 3) {
@@ -201,12 +194,11 @@ wss.on('connection', (ws) => {
         
         if (registreCartes.has(cible)) {
           const carteWs = registreCartes.get(cible).ws;
-          // NOUVEAUTÉ : On bloque l'ordre et Google Sheets si la carte est morte
           if (carteWs && carteWs.readyState === WebSocket.OPEN) {
             carteWs.send(ordre);
-            ecrireHistorique(\`\${cible} : Ordre MANUEL envoyé -> \${ordre}\`);
+            ecrireHistorique(`${cible} : Ordre MANUEL envoyé -> ${ordre}`);
           } else {
-            console.log(\`[Erreur] Ordre annulé, \${cible} est hors ligne.\`);
+            console.log(`[Erreur] Ordre annulé, ${cible} est hors ligne.`);
           }
         }
       }
@@ -226,27 +218,24 @@ function diffuserMiseAJourWeb() {
   });
 }
 
-// --- 3. LE CHIEN DE GARDE (WATCHDOG) ANTI-DÉCONNEXION FANTÔME ---
+// --- 3. LE CHIEN DE GARDE (WATCHDOG) ---
 setInterval(() => {
   const maintenant = Date.now();
   let changementDetecte = false;
 
   for (const [nom, infos] of registreCartes.entries()) {
-    // Si la carte est censée être en ligne, mais qu'elle n'a rien envoyé depuis plus de 25 secondes
     if (infos.ws && (maintenant - infos.derniereVue > 25000)) {
-      console.log(\`[Alerte] \${nom} ne répond plus (Coupure de courant ou de Wi-Fi détectée).\`);
-      infos.ws.terminate(); // On coupe de force la connexion fantôme
-      infos.ws = null;      // On la déclare officiellement morte
+      console.log(`[Alerte] ${nom} ne répond plus (Coupure de courant ou de Wi-Fi).`);
+      infos.ws.terminate(); 
+      infos.ws = null;      
       changementDetecte = true;
     }
   }
 
-  // S'il y a eu un mort, on avertit immédiatement les téléphones connectés
   if (changementDetecte) {
     diffuserMiseAJourWeb();
   }
-}, 10000); // Le serveur fait sa ronde toutes les 10 secondes
-
+}, 10000); 
 
 // --- 4. LE CERVEAU MÉTÉO AUTOMATISÉ ---
 async function verifierPluieGlobal() {
@@ -254,13 +243,12 @@ async function verifierPluieGlobal() {
     if (!infos.ws || infos.ws.readyState !== WebSocket.OPEN) continue; 
 
     try {
-      const url = \`https://api.open-meteo.com/v1/forecast?latitude=\${infos.lat}&longitude=\${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3\`;
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${infos.lat}&longitude=${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
       const reponse = await fetch(url);
       
-      if (!reponse.ok) throw new Error(\`Open-Météo a refusé la connexion (Code erreur HTTP : \${reponse.status})\`);
+      if (!reponse.ok) throw new Error(`Open-Météo a refusé (Code : ${reponse.status})`);
 
       const data = await reponse.json();
-
       const heureActuelle = new Date().getTime();
       let indexDepart = data.hourly.time.findIndex(t => new Date(t).getTime() >= heureActuelle);
       if (indexDepart === -1) indexDepart = 0;
@@ -270,13 +258,13 @@ async function verifierPluieGlobal() {
         pluieTotale += data.hourly.precipitation[i];
       }
 
-      console.log(\`[Météo] \${nom} : \${pluieTotale.toFixed(1)} mm prévus sur 48h.\`);
+      console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus.`);
 
       if (pluieTotale > 10) {
         const relais1Allume = (infos.etat & 1) !== 0;
         if (!relais1Allume) {
           infos.ws.send("R1_ON");
-          ecrireHistorique(\`\${nom} : Alerte Pluie (\${pluieTotale.toFixed(1)}mm) -> Allumage automatique\`);
+          ecrireHistorique(`${nom} : Alerte Pluie (${pluieTotale.toFixed(1)}mm) -> Allumage`);
           infos.etat = infos.etat | 1; 
         }
       } else {
@@ -284,12 +272,12 @@ async function verifierPluieGlobal() {
         if (relais1Allume) {
           infos.ws.send("R1_OFF");
           infos.etat = infos.etat & ~1;
-          ecrireHistorique(\`\${nom} : Fin de l'alerte pluie -> Extinction automatique\`);
+          ecrireHistorique(`${nom} : Fin de l'alerte pluie -> Extinction`);
         }
       }
 
     } catch (erreur) {
-      console.error(\`[Erreur Météo] Problème avec \${nom} :\`, erreur.message);
+      console.error(`[Erreur Météo] Problème avec ${nom} :`, erreur.message);
     }
   }
 }
