@@ -163,6 +163,8 @@ wss.on('connection', (ws) => {
           registreCartes.get(nom).etat = etat;
           registreCartes.get(nom).ws = ws; 
           diffuserMiseAJourWeb();
+          // DÉCLENCHEMENT IMMÉDIAT : On vérifie la météo dès qu'une carte se branche
+        verifierPluieGlobal();
         }
       }
     }
