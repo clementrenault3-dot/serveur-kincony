@@ -1,15 +1,49 @@
 const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
+const { google } = require('googleapis'); // Ajout du module Google
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const CODE_SECRET = "1234";
-
-// --- NOTRE REGISTRE DE CARTES ---
 const registreCartes = new Map();
+
+// --- CONNEXION SÉCURISÉE À GOOGLE SHEETS ---
+let authGoogle;
+try {
+  if (process.env.GOOGLE_CREDENTIALS) {
+    const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+    authGoogle = new google.auth.GoogleAuth({
+      credentials,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
+    console.log("[Système] Authentification Google Sheets prête.");
+  }
+} catch (erreur) {
+  console.log("[Erreur] Impossible de lire la clé Google :", erreur.message);
+}
+
+// Fonction pour écrire dans le tableau
+async function ecrireHistorique(evenement) {
+  if (!authGoogle || !process.env.SPREADSHEET_ID) return;
+  try {
+    const sheets = google.sheets({ version: 'v4', auth: authGoogle });
+    // Récupère l'heure exacte de Paris
+    const dateFR = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+    
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: process.env.SPREADSHEET_ID,
+      range: 'Feuille 1!A:B', // Écrit dans les colonnes A et B
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [[dateFR, evenement]] }
+    });
+    console.log(`[Historique] Sauvegardé : ${evenement}`);
+  } catch (erreur) {
+    console.error("[Erreur Google Sheets]", erreur.message);
+  }
+}
 
 // --- 1. L'INTERFACE WEB (TABLEAU DE BORD) ---
 app.get('/', (req, res) => {
@@ -45,14 +79,10 @@ app.get('/', (req, res) => {
       <input type="password" id="pin-input" placeholder="PIN">
       <button class="btn-login" onclick="validerPin()">Accéder</button>
     </div>
-
     <div id="ecran-app">
       <h1>Flotte Domotique</h1>
-      <div id="cartes-container">
-        <p>En attente de connexion au serveur...</p>
-      </div>
+      <div id="cartes-container"><p>En attente de connexion au serveur...</p></div>
     </div>
-
     <script>
       let codePin = "";
       const ws = new WebSocket('wss://' + window.location.host);
@@ -68,17 +98,13 @@ app.get('/', (req, res) => {
         const msg = event.data;
         if (msg.startsWith("{")) {
             const data = JSON.parse(msg);
-            if (data.type === "UPDATE") {
-                majAffichageCartes(data.liste);
-            }
+            if (data.type === "UPDATE") majAffichageCartes(data.liste);
         }
       };
 
       function majAffichageCartes(listeCartes) {
         let html = '';
-        if (listeCartes.length === 0) {
-            html = "<p>Aucune carte n'est actuellement détectée par le serveur.</p>";
-        }
+        if (listeCartes.length === 0) html = "<p>Aucune carte n'est actuellement détectée.</p>";
 
         listeCartes.forEach(carte => {
           const statusClass = carte.enLigne ? "online" : "offline";
@@ -95,12 +121,7 @@ app.get('/', (req, res) => {
               </button>
             </div>\`;
           }
-
-          html += \`
-          <div class="carte-section">
-            <div class="status-bar \${statusClass}">Appareil : \${carte.nom.replace(/_/g, ' ')} - \${statusText}</div>
-            <div class="container">\${relaisHtml}</div>
-          </div>\`;
+          html += \`<div class="carte-section"><div class="status-bar \${statusClass}">Appareil : \${carte.nom.replace(/_/g, ' ')} - \${statusText}</div><div class="container">\${relaisHtml}</div></div>\`;
         });
         document.getElementById('cartes-container').innerHTML = html;
       }
@@ -129,7 +150,7 @@ wss.on('connection', (ws) => {
       if (parts.length >= 4) {
         const nom = parts[1];
         registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], etat: 0 });
-        console.log(`[Nouvelle Carte] ${nom} enregistrée aux coordonnées ${parts[2]}, ${parts[3]}`);
+        console.log(`[Nouvelle Carte] ${nom} connectée.`);
         diffuserMiseAJourWeb();
       }
     } 
@@ -158,7 +179,9 @@ wss.on('connection', (ws) => {
           const carteWs = registreCartes.get(cible).ws;
           if (carteWs && carteWs.readyState === WebSocket.OPEN) {
             carteWs.send(ordre);
-            console.log(`[Ordre Manuel] Action ${ordre} transmise à ${cible}`);
+            
+            // Enregistrement de l'action manuelle dans Google Sheets
+            ecrireHistorique(`${cible} : Ordre MANUEL envoyé -> ${ordre}`);
           }
         }
       }
@@ -173,22 +196,15 @@ function diffuserMiseAJourWeb() {
     resume.push({ nom: nom, etat: infos.etat, enLigne: enLigne });
   }
   const json = JSON.stringify({ type: "UPDATE", liste: resume });
-  
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(json); 
-    }
+    if (client.readyState === WebSocket.OPEN) client.send(json); 
   });
 }
 
 // --- 3. LE CERVEAU MÉTÉO AUTOMATISÉ ---
 async function verifierPluieGlobal() {
-  console.log("[Météo] Début de la tournée d'inspection pour toutes les cartes...");
-  
   for (const [nom, infos] of registreCartes.entries()) {
-    if (!infos.ws || infos.ws.readyState !== WebSocket.OPEN) {
-      continue; 
-    }
+    if (!infos.ws || infos.ws.readyState !== WebSocket.OPEN) continue; 
 
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${infos.lat}&longitude=${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
@@ -204,14 +220,12 @@ async function verifierPluieGlobal() {
         pluieTotale += data.hourly.precipitation[i];
       }
 
-      console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus sur 48h.`);
-
       if (pluieTotale > 10) {
         infos.ws.send("R1_ON");
-        console.log(`[Alerte Pluie] Allumage R1 pour ${nom}`);
+        ecrireHistorique(`${nom} : Alerte Pluie (${pluieTotale.toFixed(1)}mm) -> Allumage R1_ON automatique`);
       } else {
         infos.ws.send("R1_OFF");
-        console.log(`[Météo Calme] Extinction R1 pour ${nom}`);
+        // On peut aussi enregistrer les extinctions si on le souhaite, c'est facultatif
       }
 
     } catch (erreur) {
