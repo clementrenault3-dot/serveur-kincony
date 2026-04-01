@@ -169,7 +169,7 @@ app.get('/', (req, res) => {
       <button class="btn-login" onclick="validerPin()">Déverrouiller</button>
     </div>
     <div id="ecran-app">
-      <h1>Flotte Domotique ⚡</h1>
+      <h1>💧 Hydro-Predict 💧</h1>
       <div id="cartes-container">
         <div style="text-align: center; color: var(--text-muted); height: 100px; display: flex; align-items: center; justify-content: center;">En attente de connexion...</div>
       </div>
