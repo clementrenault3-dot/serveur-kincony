@@ -30,10 +30,10 @@ async function ecrireHistorique(evenement) {
   try {
     const sheets = google.sheets({ version: 'v4', auth: authGoogle });
     const dateFR = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
-    
+
     await sheets.spreadsheets.values.append({
       spreadsheetId: process.env.SPREADSHEET_ID,
-      range: 'Feuille 1!A:B', 
+      range: 'Feuille 1!A:B',
       valueInputOption: 'USER_ENTERED',
       requestBody: { values: [[dateFR, evenement]] }
     });
@@ -237,7 +237,7 @@ app.get('/', (req, res) => {
 
 // --- 2. GESTION DES COMMUNICATIONS WEBSOCKETS ---
 wss.on('connection', (ws) => {
-  
+
   // Gère la déconnexion propre du Wi-Fi
   ws.on('close', () => {
     for (const [nom, infos] of registreCartes.entries()) {
@@ -262,7 +262,7 @@ wss.on('connection', (ws) => {
         diffuserMiseAJourWeb();
         verifierPluieGlobal();
       }
-    } 
+    }
     else if (data.startsWith("STATE:")) {
       const parts = data.split(":");
       if (parts.length >= 3) {
@@ -274,8 +274,8 @@ wss.on('connection', (ws) => {
           registreCartes.get(nom).etat = etat;
           if (volume !== null && !isNaN(volume)) registreCartes.get(nom).volume = volume;
           if (pourcentage !== null && !isNaN(pourcentage)) registreCartes.get(nom).pourcentage = pourcentage;
-          registreCartes.get(nom).ws = ws; 
-          registreCartes.get(nom).derniereVue = Date.now(); 
+          registreCartes.get(nom).ws = ws;
+          registreCartes.get(nom).derniereVue = Date.now();
           diffuserMiseAJourWeb();
         }
       }
@@ -287,8 +287,8 @@ wss.on('connection', (ws) => {
       const parts = data.split("-");
       if (parts.length >= 3) {
         const cible = parts[1];
-        const ordre = parts[2]; 
-        
+        const ordre = parts[2];
+
         if (registreCartes.has(cible)) {
           const carteWs = registreCartes.get(cible).ws;
           if (carteWs && carteWs.readyState === WebSocket.OPEN) {
@@ -307,17 +307,17 @@ function diffuserMiseAJourWeb() {
   const resume = [];
   for (const [nom, infos] of registreCartes.entries()) {
     const enLigne = (infos.ws && infos.ws.readyState === WebSocket.OPEN);
-    resume.push({ 
-      nom: nom, 
-      etat: infos.etat, 
+    resume.push({
+      nom: nom,
+      etat: infos.etat,
       volume: infos.volume,
       pourcentage: infos.pourcentage,
-      enLigne: enLigne 
+      enLigne: enLigne
     });
   }
   const json = JSON.stringify({ type: "UPDATE", liste: resume });
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) client.send(json); 
+    if (client.readyState === WebSocket.OPEN) client.send(json);
   });
 }
 
@@ -329,8 +329,8 @@ setInterval(() => {
   for (const [nom, infos] of registreCartes.entries()) {
     if (infos.ws && (maintenant - infos.derniereVue > 25000)) {
       console.log(`[Alerte] ${nom} ne répond plus (Coupure de courant ou de Wi-Fi).`);
-      infos.ws.terminate(); 
-      infos.ws = null;      
+      infos.ws.terminate();
+      infos.ws = null;
       changementDetecte = true;
     }
   }
@@ -338,17 +338,30 @@ setInterval(() => {
   if (changementDetecte) {
     diffuserMiseAJourWeb();
   }
-}, 10000); 
+}, 10000);
 
 // --- 4. LE CERVEAU MÉTÉO AUTOMATISÉ ---
+let tempsDerniereMeteo = 0; // La mémoire de la dernière vérification
+
 async function verifierPluieGlobal() {
+  const maintenant = Date.now();
+
+  // LE BOUCLIER : 1 heure = 3 600 000 millisecondes
+  if (tempsDerniereMeteo !== 0 && (maintenant - tempsDerniereMeteo < 3600000)) {
+    console.log("[Météo] Requête ignorée : La dernière vérification date de moins d'une heure.");
+    return; // On annule l'exécution de la suite
+  }
+
+  // Si le bouclier est passé, on mémorise l'heure actuelle pour bloquer les requêtes suivantes
+  tempsDerniereMeteo = maintenant;
+
   for (const [nom, infos] of registreCartes.entries()) {
-    if (!infos.ws || infos.ws.readyState !== WebSocket.OPEN) continue; 
+    if (!infos.ws || infos.ws.readyState !== WebSocket.OPEN) continue;
 
     try {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${infos.lat}&longitude=${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
       const reponse = await fetch(url);
-      
+
       if (!reponse.ok) throw new Error(`Open-Météo a refusé (Code : ${reponse.status})`);
 
       const data = await reponse.json();
@@ -368,7 +381,7 @@ async function verifierPluieGlobal() {
         if (!relais1Allume) {
           infos.ws.send("R1_ON");
           ecrireHistorique(`${nom} : Alerte Pluie (${pluieTotale.toFixed(1)}mm) -> Allumage`);
-          infos.etat = infos.etat | 1; 
+          infos.etat = infos.etat | 1;
         }
       } else {
         const relais1Allume = (infos.etat & 1) !== 0;
