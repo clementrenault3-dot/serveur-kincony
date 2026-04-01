@@ -53,6 +53,7 @@ app.get('/', (req, res) => {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Centre de Contrôle Domotique</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
       :root {
         --bg-color: #0f172a;
@@ -124,6 +125,17 @@ app.get('/', (req, res) => {
       .container { 
         display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; 
       }
+      .dashboard-layout { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+      .tank-column { width: 80px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+      .tank-container {
+        width: 60px; height: 180px; background: rgba(255,255,255,0.05); border: 2px solid var(--card-border);
+        border-radius: 30px; position: relative; overflow: hidden; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); margin-bottom: 15px;
+      }
+      .tank-fill {
+        position: absolute; bottom: 0; width: 100%; background: linear-gradient(to top, #0ea5e9, #38bdf8);
+        transition: height 1s ease-out; box-shadow: 0 0 15px #38bdf8;
+      }
+      .chart-column { flex-grow: 1; min-width: 300px; background: rgba(0,0,0,0.2); border-radius: 15px; padding: 15px; border: 1px solid var(--card-border); min-height: 200px; position: relative; }
       .card { 
         background: rgba(255,255,255,0.03); border: 1px solid var(--card-border);
         padding: 20px 15px; border-radius: 16px; text-align: center;
@@ -192,6 +204,8 @@ app.get('/', (req, res) => {
         }
       };
 
+      const chartsMemory = {};
+
       function majAffichageCartes(listeCartes) {
         let htmlFinal = '';
         if (listeCartes.length === 0) htmlFinal = "<div style='text-align: center; color: var(--text-muted);'>Aucune carte n'est actuellement détectée.</div>";
@@ -202,8 +216,20 @@ app.get('/', (req, res) => {
           const statusText = carte.enLigne ? "En ligne" : "Hors ligne";
           
           let sensorHtml = '';
+          let dashboardHtml = '';
+          
           if (carte.volume !== undefined && carte.volume !== null && carte.pourcentage !== undefined && carte.pourcentage !== null) {
             sensorHtml = '<div class="sensor-data"><span>💧 ' + carte.volume + ' L</span><span>📊 ' + carte.pourcentage + '%</span></div>';
+            
+            dashboardHtml = '<div class="dashboard-layout">' +
+              '<div class="tank-column">' +
+                 '<div class="tank-container"><div class="tank-fill" style="height: ' + carte.pourcentage + '%;"></div></div>' +
+                 '<div style="font-weight:bold;color:#38bdf8;">' + carte.pourcentage + '%</div>' +
+              '</div>' +
+              '<div class="chart-column">' +
+                 '<canvas id="chart-' + carte.nom + '"></canvas>' +
+              '</div>' +
+            '</div>';
           }
 
           let relaisHtml = '';
@@ -226,10 +252,59 @@ app.get('/', (req, res) => {
               '<div class="status-title">' + nomPropre + ' <span class="status-badge">' + statusIcon + ' ' + statusText + '</span></div>' + 
               sensorHtml + 
             '</div>' +
+            dashboardHtml +
             '<div class="container">' + relaisHtml + '</div>' +
           '</div>';
         });
         document.getElementById('cartes-container').innerHTML = htmlFinal;
+
+        setTimeout(() => {
+          listeCartes.forEach(carte => {
+             if (carte.historique && carte.historique.length > 0) {
+               dessinerGraphique(carte.nom, carte.historique);
+             }
+          });
+        }, 50);
+      }
+
+      function dessinerGraphique(nom, historique) {
+         const ctx = document.getElementById('chart-' + nom);
+         if(!ctx) return;
+         
+         const dataPoints = historique.map(h => h.volume);
+         const labels = historique.map(h => new Date(h.time).toLocaleTimeString('fr-FR'));
+
+         if(chartsMemory[nom]) {
+             chartsMemory[nom].data.labels = labels;
+             chartsMemory[nom].data.datasets[0].data = dataPoints;
+             chartsMemory[nom].update();
+         } else {
+             chartsMemory[nom] = new Chart(ctx, {
+                 type: 'line',
+                 data: {
+                     labels: labels,
+                     datasets: [{
+                         label: 'Volume (Litres)',
+                         data: dataPoints,
+                         borderColor: '#38bdf8',
+                         backgroundColor: 'rgba(56, 189, 248, 0.2)',
+                         fill: true,
+                         tension: 0.4
+                     }]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: { labels: { color: '#f8fafc' } }
+                     },
+                     scales: {
+                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                         y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' }, min: 0 }
+                     }
+                 }
+             });
+         }
       }
 
       function envoyerOrdre(nomCarte, numeroRelais, action) { 
@@ -268,7 +343,7 @@ wss.on('connection', (ws) => {
       const parts = data.split(":");
       if (parts.length >= 4) {
         const nom = parts[1];
-        registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], etat: 0, derniereVue: Date.now() });
+        registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], etat: 0, derniereVue: Date.now(), historiqueVolume: [] });
         console.log(`[Nouvelle Carte] ${nom} connectée.`);
         diffuserMiseAJourWeb();
         verifierPluieGlobal();
@@ -287,6 +362,12 @@ wss.on('connection', (ws) => {
           if (pourcentage !== null && !isNaN(pourcentage)) registreCartes.get(nom).pourcentage = pourcentage;
           registreCartes.get(nom).ws = ws;
           registreCartes.get(nom).derniereVue = Date.now();
+          
+          if (!registreCartes.get(nom).historiqueVolume) registreCartes.get(nom).historiqueVolume = [];
+          if (volume !== null && !isNaN(volume)) {
+            registreCartes.get(nom).historiqueVolume.push({ time: Date.now(), volume: volume });
+            if (registreCartes.get(nom).historiqueVolume.length > 100) registreCartes.get(nom).historiqueVolume.shift();
+          }
           diffuserMiseAJourWeb();
         }
       }
@@ -323,6 +404,7 @@ function diffuserMiseAJourWeb() {
       etat: infos.etat,
       volume: infos.volume,
       pourcentage: infos.pourcentage,
+      historique: infos.historiqueVolume || [],
       enLigne: enLigne
     });
   }
