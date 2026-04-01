@@ -163,14 +163,25 @@ app.get('/', (req, res) => {
       </div>
     </div>
     <script>
-      let codePin = "";
+      let codePin = localStorage.getItem("savedPin") || "";
       const ws = new WebSocket('wss://' + window.location.host);
       
+      ws.onopen = () => {
+        if (codePin) {
+          document.getElementById('ecran-login').style.display = 'none';
+          document.getElementById('ecran-app').style.display = 'block';
+          ws.send("GET_DASHBOARD"); 
+        }
+      };
+
       function validerPin() {
         codePin = document.getElementById('pin-input').value;
+        localStorage.setItem("savedPin", codePin);
         document.getElementById('ecran-login').style.display = 'none';
         document.getElementById('ecran-app').style.display = 'block';
-        ws.send("GET_DASHBOARD"); 
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send("GET_DASHBOARD"); 
+        }
       }
 
       ws.onmessage = (event) => {
@@ -376,7 +387,7 @@ async function verifierPluieGlobal() {
 
       console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus.`);
 
-      if (pluieTotale > 3) {
+      if (pluieTotale > 10) {
         const relais1Allume = (infos.etat & 1) !== 0;
         if (!relais1Allume) {
           infos.ws.send("R1_ON");
