@@ -376,7 +376,7 @@ async function verifierPluieGlobal() {
 
       console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus.`);
 
-      if (pluieTotale > 10) {
+      if (pluieTotale > 3) {
         const relais1Allume = (infos.etat & 1) !== 0;
         if (!relais1Allume) {
           infos.ws.send("R1_ON");
