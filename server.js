@@ -342,7 +342,7 @@ app.get('/', (req, res) => {
              newCarteTemplate.innerHTML = 
                '<div class="status-bar">' +
                  '<div class="status-title">' + nomPropre + ' <span class="status-badge" id="status-' + safeNom + '">' + statusIcon + ' ' + statusText + '</span></div>' + 
-                 '<div class="sensor-data"><span id="vol-' + safeNom + '">💧 0 L</span><span id="pct-' + safeNom + '">📊 0.0%</span></div>' +
+                 '<div class="sensor-data"><span id="vol-' + safeNom + '">💧 0 L</span><span id="pct-' + safeNom + '">📊 0.0%</span><span id="meteo-' + safeNom + '" style="color:#60a5fa;">🌧️ -- mm</span></div>' +
                '</div>' +
                '<div class="dashboard-layout">' +
                  '<div class="tank-column">' +
@@ -376,6 +376,8 @@ app.get('/', (req, res) => {
              if (carte.volume !== null && carte.pourcentage !== null) {
                  document.getElementById('vol-' + safeNom).innerText = '💧 ' + carte.volume + ' L';
                  document.getElementById('pct-' + safeNom).innerText = '📊 ' + carte.pourcentage + '%';
+                 if (carte.pluie !== undefined) document.getElementById('meteo-' + safeNom).innerText = '🌧️ ' + carte.pluie + ' mm (48h)';
+
                  document.getElementById('fill-' + safeNom).style.height = carte.pourcentage + '%';
                  document.getElementById('filltext-' + safeNom).innerText = carte.pourcentage + '%';
                  
@@ -650,6 +652,7 @@ function diffuserMiseAJourWeb() {
       etat: infos.etat,
       volume: infos.volume,
       pourcentage: infos.pourcentage,
+      pluie: infos.pluiePrevue,
       // On n'envoie dorénavant plus l'historique complet pour ne pas polluer l'ESP32 et le réseau.
       enLigne: enLigne
     });
@@ -713,7 +716,10 @@ async function verifierPluieGlobal() {
         pluieTotale += data.hourly.precipitation[i];
       }
 
-      console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus.`);
+      infos.pluiePrevue = pluieTotale.toFixed(1); // Enregistrement pour le Dashboard
+      diffuserMiseAJourWeb(); // Met à jour l'interface avec la nouvelle météo
+
+      console.log(`[Météo] ${nom} : ${infos.pluiePrevue} mm prévus.`);
 
       // SMART DRAINING
       let actionMeteoRequise = false;
