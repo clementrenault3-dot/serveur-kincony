@@ -54,14 +54,30 @@ async function chargerHistoriqueLongTableau() {
       range: 'Feuille_Volume!A:C',
     });
     const rows = response.data.values;
-    if (rows && rows.length > 1) { // Ignore la ligne d'en-tête éventuelle
+    if (rows && rows.length > 0) { 
       let count = 0;
       rows.forEach((row, index) => {
-        if(index > 0 && row.length >= 3) {
-           const time = new Date(row[0]).getTime();
-           if(isNaN(time)) return; 
+        // Tolérance: même si c'est la ligne 0, on essaye de la lire (au cas où il n'y a pas d'en-tête texte)
+        if(row.length >= 3 && (row[0].includes('20') || row[0].includes('/'))) { 
+           let time;
+           const s = String(row[0]);
+           if (s.includes('/')) { 
+              // Récupération d'une date convertie par Google Sheets au format DD/MM/YYYY HH:MM:SS
+              const espace = s.split(' ');
+              if (espace.length >= 2) {
+                  const d = espace[0].split('/');
+                  const h = espace[1].split(':');
+                  if (d.length === 3 && h.length >= 2) {
+                      time = new Date(d[2], d[1]-1, d[0], h[0], h[1], h[2]||0).getTime();
+                  } else time = new Date(s).getTime();
+              } else time = new Date(s).getTime();
+           } else {
+              time = new Date(s).getTime(); // ISO natif
+           }
+           if (isNaN(time)) return; 
+
            const nom = row[1];
-           const vol = parseFloat(row[2].replace(',', '.')); // Corrige format FR
+           const vol = parseFloat(String(row[2]).replace(',', '.')); // Corrige format FR
            
            if (!registreCartes.has(nom)) {
              registreCartes.set(nom, { etat: 0, derniereVue: 0, historiqueVolume: [], historiqueLong: [] });
@@ -500,8 +516,9 @@ wss.on('connection', (ws) => {
       const parts = data.split(":");
       if (parts.length >= 4) {
         const nom = parts[1];
-        registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], etat: 0, derniereVue: Date.now(), historiqueVolume: [] });
-        console.log(`[Nouvelle Carte] ${nom} connectée.`);
+        const surfaceT = parts.length >= 5 ? parseFloat(parts[4]) : 0; // Défaut à 0 si ancienne version
+        registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], surface: surfaceT, etat: 0, derniereVue: Date.now(), historiqueVolume: [] });
+        console.log(`[Nouvelle Carte] ${nom} connectée. (Toit: ${surfaceT}m²)`);
         diffuserMiseAJourWeb();
         verifierPluieGlobal();
       }
@@ -514,16 +531,27 @@ wss.on('connection', (ws) => {
         const volume = parts.length >= 5 ? parseFloat(parts[3]) : null;
         const pourcentage = parts.length >= 5 ? parseFloat(parts[4]) : null;
         if (registreCartes.has(nom)) {
-          registreCartes.get(nom).etat = etat;
-          if (volume !== null && !isNaN(volume)) registreCartes.get(nom).volume = volume;
-          if (pourcentage !== null && !isNaN(pourcentage)) registreCartes.get(nom).pourcentage = pourcentage;
-          registreCartes.get(nom).ws = ws;
-          registreCartes.get(nom).derniereVue = Date.now();
+          const infos = registreCartes.get(nom);
+          infos.etat = etat;
+          if (volume !== null && !isNaN(volume)) infos.volume = volume;
+          if (pourcentage !== null && !isNaN(pourcentage)) infos.pourcentage = pourcentage;
+          infos.ws = ws;
+          infos.derniereVue = Date.now();
           
-          if (!registreCartes.get(nom).historiqueVolume) registreCartes.get(nom).historiqueVolume = [];
+          if (!infos.historiqueVolume) infos.historiqueVolume = [];
           if (volume !== null && !isNaN(volume)) {
-            registreCartes.get(nom).historiqueVolume.push({ time: Date.now(), volume: volume });
-            if (registreCartes.get(nom).historiqueVolume.length > 100) registreCartes.get(nom).historiqueVolume.shift();
+            infos.historiqueVolume.push({ time: Date.now(), volume: volume });
+            if (infos.historiqueVolume.length > 100) infos.historiqueVolume.shift();
+            
+            // --- CHIEN DE GARDE MÉTÉO EN DIRECT ---
+            if (infos.arretMeteoVolumeCible !== undefined && (infos.etat & 1) !== 0) {
+               if (infos.volume <= infos.arretMeteoVolumeCible) {
+                   infos.ws.send("R1_OFF"); // On ferme l'eau, objectif atteint !
+                   infos.etat = infos.etat & ~1;
+                   ecrireHistorique(`${nom} : Plafond sécurisé (Descendu à ${infos.volume}L). Objectif Météo Atteint -> Fermeture Vanne.`);
+                   delete infos.arretMeteoVolumeCible;
+               }
+            }
           }
           diffuserMiseAJourWeb();
         }
@@ -673,19 +701,49 @@ async function verifierPluieGlobal() {
 
       console.log(`[Météo] ${nom} : ${pluieTotale.toFixed(1)} mm prévus.`);
 
-      if (pluieTotale > 10) {
+      // SMART DRAINING
+      let actionMeteoRequise = false;
+      const surfaceToit = infos.surface ? infos.surface : 0;
+      
+      if (surfaceToit > 0 && infos.volume !== undefined && infos.pourcentage !== undefined && infos.pourcentage > 0) {
+         // Calcul en Litres
+         const pluieLitrePrevu = pluieTotale * surfaceToit; 
+         const capaciteMax = infos.volume / (infos.pourcentage / 100.0);
+         const espaceLibre = capaciteMax - infos.volume;
+         
+         // Si la pluie prévue menace de faire déborder (+ marge de sécurité de 50L)
+         if (pluieLitrePrevu > espaceLibre + 50) {
+            actionMeteoRequise = true;
+            const surplus = pluieLitrePrevu - espaceLibre;
+            infos.arretMeteoVolumeCible = infos.volume - surplus;
+            if (infos.arretMeteoVolumeCible < 0) infos.arretMeteoVolumeCible = 0; // Sécurité
+
+            const relais1Allume = (infos.etat & 1) !== 0;
+            if (!relais1Allume) {
+               infos.ws.send("R1_ON");
+               infos.etat = infos.etat | 1;
+               ecrireHistorique(`${nom} : DANGER DÉBORDEMENT (${pluieLitrePrevu.toFixed(0)}L d'eau attendus pour ${espaceLibre.toFixed(0)}L d'espace). Ouverture Vanne jusqu'à ${infos.arretMeteoVolumeCible.toFixed(0)}L.`);
+            }
+         }
+      } else if (pluieTotale > 10 && surfaceToit === 0) {
+         // Fallback classique si la surface n'est pas configurée
+         actionMeteoRequise = true;
+         const relais1Allume = (infos.etat & 1) !== 0;
+         if (!relais1Allume) {
+           infos.ws.send("R1_ON");
+           infos.etat = infos.etat | 1;
+           ecrireHistorique(`${nom} : Alerte Pluie Classique (>10mm) -> Allumage`);
+         }
+      }
+
+      // Si aucune action n'est requise, on coupe (seulement si la météo l'avait ordonné)
+      if (!actionMeteoRequise) {
         const relais1Allume = (infos.etat & 1) !== 0;
-        if (!relais1Allume) {
-          infos.ws.send("R1_ON");
-          ecrireHistorique(`${nom} : Alerte Pluie (${pluieTotale.toFixed(1)}mm) -> Allumage`);
-          infos.etat = infos.etat | 1;
-        }
-      } else {
-        const relais1Allume = (infos.etat & 1) !== 0;
-        if (relais1Allume) {
-          infos.ws.send("R1_OFF");
-          infos.etat = infos.etat & ~1;
-          ecrireHistorique(`${nom} : Fin de l'alerte pluie -> Extinction`);
+        if (relais1Allume && infos.arretMeteoVolumeCible !== undefined) {
+           infos.ws.send("R1_OFF");
+           infos.etat = infos.etat & ~1;
+           ecrireHistorique(`${nom} : Risque Météo Écarté -> Fermeture.`);
+           delete infos.arretMeteoVolumeCible;
         }
       }
 
