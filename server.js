@@ -169,7 +169,7 @@ app.get('/', (req, res) => {
       <button class="btn-login" onclick="validerPin()">Déverrouiller</button>
     </div>
     <div id="ecran-app">
-      <h1>💧 Hydro-Predict 💧</h1>
+      <h1>Flotte Domotique ⚡</h1>
       <div id="cartes-container">
         <div style="text-align: center; color: var(--text-muted); height: 100px; display: flex; align-items: center; justify-content: center;">En attente de connexion...</div>
       </div>
@@ -274,37 +274,38 @@ app.get('/', (req, res) => {
          const dataPoints = historique.map(h => h.volume);
          const labels = historique.map(h => new Date(h.time).toLocaleTimeString('fr-FR'));
 
+         // Comme on efface le HTML toutes les 10 secondes, l'ancien Canvas est détruit.
+         // On doit donc détruire l'ancienne "mémoire" du graphique avant de redessiner.
          if(chartsMemory[nom]) {
-             chartsMemory[nom].data.labels = labels;
-             chartsMemory[nom].data.datasets[0].data = dataPoints;
-             chartsMemory[nom].update();
-         } else {
-             chartsMemory[nom] = new Chart(ctx, {
-                 type: 'line',
-                 data: {
-                     labels: labels,
-                     datasets: [{
-                         label: 'Volume (Litres)',
-                         data: dataPoints,
-                         borderColor: '#38bdf8',
-                         backgroundColor: 'rgba(56, 189, 248, 0.2)',
-                         fill: true,
-                         tension: 0.4
-                     }]
-                 },
-                 options: {
-                     responsive: true,
-                     maintainAspectRatio: false,
-                     plugins: {
-                         legend: { labels: { color: '#f8fafc' } }
-                     },
-                     scales: {
-                         x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' } },
-                         y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' }, min: 0 }
-                     }
-                 }
-             });
+             chartsMemory[nom].destroy();
          }
+         
+         chartsMemory[nom] = new Chart(ctx, {
+             type: 'line',
+             data: {
+                 labels: labels,
+                 datasets: [{
+                     label: 'Volume (Litres)',
+                     data: dataPoints,
+                     borderColor: '#38bdf8',
+                     backgroundColor: 'rgba(56, 189, 248, 0.2)',
+                     fill: true,
+                     tension: 0.4
+                 }]
+             },
+             options: {
+                 responsive: true,
+                 maintainAspectRatio: false,
+                 animation: { duration: 0 }, // Désactive l'animation pour un rafraîchissement invisible
+                 plugins: {
+                     legend: { labels: { color: '#f8fafc' } }
+                 },
+                 scales: {
+                     x: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' } },
+                     y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' }, min: 0 }
+                 }
+             }
+         });
       }
 
       function envoyerOrdre(nomCarte, numeroRelais, action) { 
