@@ -547,17 +547,25 @@ wss.on('connection', (ws) => {
             
             if (periode === '1d') {
                 timeLimite = refTime - (24 * 3600 * 1000); 
-                intervalleMillis = 0; // Aucun tri supplémentaire (la base est déjà échantillonnée par 5 minutes)
+                intervalleMillis = 0; 
             } else if (periode === '1w') {
                 timeLimite = refTime - (7 * 24 * 3600 * 1000);
-                intervalleMillis = 1800000; // 30 minutes entre chaque point (pour ne pas saturer le graph)
+                intervalleMillis = 1800000; 
             } else if (periode === '1m') {
                 timeLimite = refTime - (31 * 24 * 3600 * 1000);
-                intervalleMillis = 14400000; // 4 heures
+                intervalleMillis = 14400000; 
             }
             
-            if (infos.historiqueLong && infos.historiqueLong.length) {
-                const filteredList = infos.historiqueLong.filter(p => p.time >= timeLimite);
+            // Fusionner la base de données profonde et les données en direct de la RAM !
+            let ensemblePoints = [];
+            if (infos.historiqueLong) ensemblePoints = ensemblePoints.concat(infos.historiqueLong);
+            if (infos.historiqueVolume) ensemblePoints = ensemblePoints.concat(infos.historiqueVolume);
+            
+            // Trier par date
+            ensemblePoints.sort((a,b) => a.time - b.time);
+
+            if (ensemblePoints.length > 0) {
+                const filteredList = ensemblePoints.filter(p => p.time >= timeLimite);
                 let dernierTempsAjoute = 0;
                 filteredList.forEach(p => {
                     if (p.time - dernierTempsAjoute >= intervalleMillis) {
