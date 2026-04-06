@@ -516,9 +516,23 @@ wss.on('connection', (ws) => {
       const parts = data.split(":");
       if (parts.length >= 4) {
         const nom = parts[1];
-        const surfaceT = parts.length >= 5 ? parseFloat(parts[4]) : 0; // Défaut à 0 si ancienne version
-        registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], surface: surfaceT, etat: 0, derniereVue: Date.now(), historiqueVolume: [] });
-        console.log(`[Nouvelle Carte] ${nom} connectée. (Toit: ${surfaceT}m²)`);
+        const surfaceT = parts.length >= 5 ? parseFloat(parts[4]) : 0; 
+        
+        if (!registreCartes.has(nom)) {
+           // Création initiale
+           registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], surface: surfaceT, etat: 0, derniereVue: Date.now(), historiqueVolume: [], historiqueLong: [] });
+           console.log(`[Nouvelle Carte] ${nom} enregistrée. (Toit: ${surfaceT}m²)`);
+        } else {
+           // Mise à jour vitale sans écraser la mémoire RAM et les historiques !
+           const infos = registreCartes.get(nom);
+           infos.ws = ws;
+           infos.lat = parts[2];
+           infos.lon = parts[3];
+           infos.surface = surfaceT;
+           infos.derniereVue = Date.now();
+           console.log(`[Information] ${nom} s'est reconnectée au Wi-Fi. (Toit: ${surfaceT}m²)`);
+        }
+        
         diffuserMiseAJourWeb();
         verifierPluieGlobal();
       }
