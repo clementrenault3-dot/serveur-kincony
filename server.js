@@ -26,23 +26,38 @@ try {
   console.log("[Erreur] Impossible de lire la clé Google :", erreur.message);
 }
 
-async function ecrireHistorique(evenement) {
-  if (!authGoogle || !process.env.SPREADSHEET_ID) return;
-  try {
-    const sheets = google.sheets({ version: 'v4', auth: authGoogle });
-    const dateFR = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+// Faille 4 : Buffer mémoire pour éviter d'exploser le Quota Google API
+let eventsBuffer = [];
 
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: process.env.SPREADSHEET_ID,
-      range: 'Feuille 1!A:B',
-      valueInputOption: 'USER_ENTERED',
-      requestBody: { values: [[dateFR, evenement]] }
-    });
-    console.log(`[Historique d'événements] Sauvegardé : ${evenement}`);
-  } catch (erreur) {
-    console.error("[Erreur Google Sheets]", erreur.message);
-  }
+function ecrireHistorique(evenement) {
+  if (!authGoogle || !process.env.SPREADSHEET_ID) return;
+  const dateFR = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+  eventsBuffer.push([dateFR, evenement]);
+  console.log(`[Événement Bufferisé en RAM] : ${evenement}`);
 }
+
+// Chasse d'eau du Buffer (Flush) effectuée toutes les minutes vers Google Sheets
+setInterval(async () => {
+  if (eventsBuffer.length > 0 && authGoogle && process.env.SPREADSHEET_ID) {
+    const lignesASauver = [...eventsBuffer];
+    eventsBuffer = []; // On vide immédiatement le buffer principal pour ne rater aucun nouvel event durant l'envoi
+
+    try {
+      const sheets = google.sheets({ version: 'v4', auth: authGoogle });
+      await sheets.spreadsheets.values.append({
+        spreadsheetId: process.env.SPREADSHEET_ID,
+        range: 'Feuille 1!A:B',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: { values: lignesASauver }
+      });
+      console.log(`[Synchronisation Google API] ${lignesASauver.length} événement(s) poussé(s) en rafale avec succès.`);
+    } catch (erreur) {
+      console.error("[Erreur Google API Flush]", erreur.message);
+      // Faille 4 (Backups) : En cas de panne internet temporaire, on remet les lignes dans le buffer pour le prochain cycle !
+      eventsBuffer = lignesASauver.concat(eventsBuffer);
+    }
+  }
+}, 60000); // 1 Requête maximum par minute (Ultra safe pour les quotas)
 
 // Fonction de chargement de l'onglet Feuille_Volume au démarrage
 async function chargerHistoriqueLongTableau() {
@@ -623,21 +638,28 @@ wss.on('connection', (ws) => {
         }
       }
     }
-    else if (data.startsWith(CODE_SECRET + "-")) {
-      const parts = data.split("-");
-      if (parts.length >= 3) {
-        const cible = parts[1];
-        const ordre = parts[2];
+    else if (data.indexOf('-') !== -1 && !data.startsWith("GET_CHART_HISTORY-")) {
+      // Faille 5 : Détection des paquets visant le contrôle des relais
+      if (data.startsWith(CODE_SECRET + "-")) {
+        const parts = data.split("-");
+        if (parts.length >= 3) {
+          const cible = parts[1];
+          const ordre = parts[2];
 
-        if (registreCartes.has(cible)) {
-          const carteWs = registreCartes.get(cible).ws;
-          if (carteWs && carteWs.readyState === WebSocket.OPEN) {
-            carteWs.send(ordre);
-            ecrireHistorique(`${cible} : Ordre MANUEL envoyé -> ${ordre}`);
-          } else {
-            console.log(`[Erreur] Ordre annulé, ${cible} est hors ligne.`);
+          if (registreCartes.has(cible)) {
+            const carteWs = registreCartes.get(cible).ws;
+            if (carteWs && carteWs.readyState === WebSocket.OPEN) {
+              carteWs.send(ordre);
+              ecrireHistorique(`${cible} : Ordre MANUEL envoyé -> ${ordre}`);
+            } else {
+              console.log(`[Erreur] Ordre annulé, ${cible} est hors ligne.`);
+            }
           }
         }
+      } else {
+        // [ANTI BRUTE-FORCE] PIN invalide détecté -> On kick physiquement le client !
+        console.log("[Alerte Sécurité] Tentative d'accès non autorisée. (Bruteforce PIN). Kick matériel.");
+        ws.terminate();
       }
     }
   });
