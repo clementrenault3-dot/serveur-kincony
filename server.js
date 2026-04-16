@@ -667,21 +667,30 @@ wss.on('connection', (ws) => {
 
 function diffuserMiseAJourWeb() {
   const resume = [];
+  const socketsHardware = new Set(); // Registre pour identifier les ESP32
+
   for (const [nom, infos] of registreCartes.entries()) {
     const enLigne = (infos.ws && infos.ws.readyState === WebSocket.OPEN);
+    if (infos.ws) socketsHardware.add(infos.ws); // Mémorise le canal des cartes physiques
+    
     resume.push({
       nom: nom,
       etat: infos.etat,
       volume: infos.volume,
       pourcentage: infos.pourcentage,
       pluie: infos.pluiePrevue,
-      // On n'envoie dorénavant plus l'historique complet pour ne pas polluer l'ESP32 et le réseau.
       enLigne: enLigne
     });
   }
+  
   const json = JSON.stringify({ type: "UPDATE", liste: resume });
+  
+  // On ne diffuse le gros JSON d'état qu'aux interfaces Web (Navigateurs) !
+  // On épargne la mémoire et la bande passante des pauvres petites ESP32.
   wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) client.send(json);
+    if (client.readyState === WebSocket.OPEN && !socketsHardware.has(client)) {
+       client.send(json);
+    }
   });
 }
 
