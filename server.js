@@ -700,7 +700,6 @@ async function verifierPluieCarte(nomCarte, force = false) {
 
   const maintenant = Date.now();
   if (!force && infos.tempsDerniereMeteo && (maintenant - infos.tempsDerniereMeteo < 3600000)) {
-    // Renvoyer immédiatement la valeur connue à la carte si déjà calculée
     if (infos.pluiePrevue !== undefined) {
       infos.ws.send("METEO:" + infos.pluiePrevue);
     }
@@ -728,13 +727,11 @@ async function verifierPluieCarte(nomCarte, force = false) {
     infos.pluiePrevue = pluieTotale.toFixed(1);
     console.log(`[Météo] ${nomCarte} : ${infos.pluiePrevue} mm prévus.`);
 
-    // Transmettre la prévision météo à la carte hardware en WebSocket !
     if (infos.ws && infos.ws.readyState === WebSocket.OPEN) {
       infos.ws.send("METEO:" + infos.pluiePrevue);
     }
     diffuserMiseAJourWeb();
 
-    // SMART DRAINING
     let actionMeteoRequise = false;
     const surfaceToit = infos.surface ? infos.surface : 0;
     
@@ -788,3 +785,9 @@ async function verifierPluieGlobal() {
 
 // Vérification météo automatique toutes les heures pour toutes les cartes
 setInterval(verifierPluieGlobal, 3600000);
+
+// --- DEMARRAGE DU SERVEUR WEB ---
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`[Serveur] En écoute sur le port ${PORT}`);
+});
