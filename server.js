@@ -551,6 +551,10 @@ wss.on('connection', (ws) => {
         }
         
         diffuserMiseAJourWeb();
+        const infosCarte = registreCartes.get(nom);
+        if (infosCarte && infosCarte.pluiePrevue && ws.readyState === WebSocket.OPEN) {
+          ws.send("METEO:" + infosCarte.pluiePrevue);
+        }
         verifierPluieGlobal();
       }
     }
@@ -748,6 +752,9 @@ async function verifierPluieGlobal() {
       }
 
       infos.pluiePrevue = pluieTotale.toFixed(1); // Enregistrement pour le Dashboard
+      if (infos.ws && infos.ws.readyState === WebSocket.OPEN) {
+        infos.ws.send("METEO:" + infos.pluiePrevue);
+      }
       diffuserMiseAJourWeb(); // Met à jour l'interface avec la nouvelle météo
 
       console.log(`[Météo] ${nom} : ${infos.pluiePrevue} mm prévus.`);
