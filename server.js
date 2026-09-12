@@ -693,28 +693,56 @@ setInterval(() => {
   }
 }, 10000);
 
-// --- 4. LE CERVEAU MÉTÉO AUTOMATISÉ ---
+// --- 4. LE CERVEAU MÉTÉO AUTOMATISÉ AVEC GESTION DU RATE LIMIT (429) ---
 async function verifierPluieCarte(nomCarte, force = false) {
   const infos = registreCartes.get(nomCarte);
   if (!infos || !infos.ws || infos.ws.readyState !== WebSocket.OPEN) return;
 
   const maintenant = Date.now();
-  if (!force && infos.tempsDerniereMeteo && (maintenant - infos.tempsDerniereMeteo < 3600000)) {
+
+  // 1. Réutilisation du cache si la météo a été consultée il y a moins de 2 heures
+  if (!force && infos.tempsDerniereMeteo && (maintenant - infos.tempsDerniereMeteo < 7200000) && infos.pluiePrevue !== undefined) {
+    console.log(`[Météo] ${nomCarte} : Envoi de la valeur en cache (${infos.pluiePrevue} mm).`);
+    infos.ws.send("METEO:" + infos.pluiePrevue);
+    return;
+  }
+
+  // 2. Si une erreur 429 a eu lieu récemment (< 15 min), réutiliser le dernier résultat sans surcharger Open-Meteo
+  if (infos.erreur429Timer && (maintenant - infos.erreur429Timer < 900000)) {
+    console.log(`[Météo 429 Backoff] ${nomCarte} : Attente de déblocage API. Valeur connue : ${infos.pluiePrevue || 0} mm.`);
     if (infos.pluiePrevue !== undefined) {
       infos.ws.send("METEO:" + infos.pluiePrevue);
     }
     return;
   }
 
-  infos.tempsDerniereMeteo = maintenant;
-
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${infos.lat}&longitude=${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
-    const reponse = await fetch(url);
+    const lat = parseFloat(infos.lat) || 50.75;
+    const lon = parseFloat(infos.lon) || 2.61;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
 
-    if (!reponse.ok) throw new Error(`Open-Météo a refusé (Code : ${reponse.status})`);
+    // Envoi avec un User-Agent propre pour éviter le blocage d'IP partagée Render
+    const reponse = await fetch(url, {
+      headers: {
+        'User-Agent': 'KinconyWaterSystem/1.0 (RainMonitoringApp)'
+      }
+    });
+
+    if (reponse.status === 429) {
+      infos.erreur429Timer = maintenant;
+      console.log(`[Météo 429] Limite d'appels temporaire atteinte sur Open-Météo pour ${nomCarte}.`);
+      if (infos.pluiePrevue !== undefined) {
+        infos.ws.send("METEO:" + infos.pluiePrevue);
+      }
+      return;
+    }
+
+    if (!reponse.ok) throw new Error(`Code réponse API : ${reponse.status}`);
 
     const data = await reponse.json();
+    infos.tempsDerniereMeteo = maintenant;
+    delete infos.erreur429Timer;
+
     const heureActuelle = new Date().getTime();
     let indexDepart = data.hourly.time.findIndex(t => new Date(t).getTime() >= heureActuelle);
     if (indexDepart === -1) indexDepart = 0;
@@ -725,7 +753,7 @@ async function verifierPluieCarte(nomCarte, force = false) {
     }
 
     infos.pluiePrevue = pluieTotale.toFixed(1);
-    console.log(`[Météo] ${nomCarte} : ${infos.pluiePrevue} mm prévus.`);
+    console.log(`[Météo Succès] ${nomCarte} : ${infos.pluiePrevue} mm prévus.`);
 
     if (infos.ws && infos.ws.readyState === WebSocket.OPEN) {
       infos.ws.send("METEO:" + infos.pluiePrevue);
