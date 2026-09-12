@@ -352,7 +352,7 @@ app.get('/', (req, res) => {
              newCarteTemplate.innerHTML = 
                '<div class="status-bar">' +
                  '<div class="status-title">' + nomPropre + ' <span class="status-badge" id="status-' + safeNom + '">' + statusIcon + ' ' + statusText + '</span></div>' + 
-                 '<div class="sensor-data"><span id="vol-' + safeNom + '">💧 0 L</span><span id="pct-' + safeNom + '">📊 0.0%</span><span id="meteo-' + safeNom + '" style="color:#60a5fa;">🌧️ -- mm</span></div>' +
+                 '<div class="sensor-data"><span id="vol-' + safeNom + '">💧 0 L</span><span id="pct-' + safeNom + '">📊 0.0%</span><span id="meteo-' + safeNom + '" style="color:#60a5fa;">🌧️ -- mm (AROME)</span></div>' +
                '</div>' +
                '<div class="dashboard-layout">' +
                  '<div class="tank-column">' +
@@ -384,7 +384,7 @@ app.get('/', (req, res) => {
              if (carte.volume !== null && carte.pourcentage !== null) {
                  document.getElementById('vol-' + safeNom).innerText = '💧 ' + carte.volume + ' L';
                  document.getElementById('pct-' + safeNom).innerText = '📊 ' + carte.pourcentage + '%';
-                 if (carte.pluie !== undefined) document.getElementById('meteo-' + safeNom).innerText = '🌧️ ' + carte.pluie + ' mm (48h)';
+                 if (carte.pluie !== undefined) document.getElementById('meteo-' + safeNom).innerText = '🌧️ ' + carte.pluie + ' mm (AROME 48h)';
 
                  document.getElementById('fill-' + safeNom).style.height = carte.pourcentage + '%';
                  document.getElementById('filltext-' + safeNom).innerText = carte.pourcentage + '%';
@@ -537,7 +537,7 @@ wss.on('connection', (ws) => {
         }
         
         diffuserMiseAJourWeb();
-        // Interroger la météo immédiatement pour cette carte
+        // Interroger la météo AROME immédiatement pour cette carte
         verifierPluieCarte(nom);
       }
     }
@@ -693,55 +693,37 @@ setInterval(() => {
   }
 }, 10000);
 
-// --- 4. LE CERVEAU MÉTÉO AUTOMATISÉ AVEC GESTION DU RATE LIMIT (429) ---
+// --- 4. LE CERVEAU MÉTÉO BASÉ EXCLUSIVEMENT SUR LE MODÈLE MÉTÉO-FRANCE AROME (SANS AUCUN SECOURS EXTERNE) ---
 async function verifierPluieCarte(nomCarte, force = false) {
   const infos = registreCartes.get(nomCarte);
   if (!infos || !infos.ws || infos.ws.readyState !== WebSocket.OPEN) return;
 
   const maintenant = Date.now();
 
-  // 1. Réutilisation du cache si la météo a été consultée il y a moins de 2 heures
+  // Réutilisation du cache si la météo AROME a été consultée il y a moins de 2 heures
   if (!force && infos.tempsDerniereMeteo && (maintenant - infos.tempsDerniereMeteo < 7200000) && infos.pluiePrevue !== undefined) {
-    console.log(`[Météo] ${nomCarte} : Envoi de la valeur en cache (${infos.pluiePrevue} mm).`);
+    console.log(`[Météo AROME] ${nomCarte} : Envoi de la valeur AROME en cache (${infos.pluiePrevue} mm).`);
     infos.ws.send("METEO:" + infos.pluiePrevue);
     return;
   }
 
-  // 2. Si une erreur 429 a eu lieu récemment (< 15 min), réutiliser le dernier résultat sans surcharger Open-Meteo
-  if (infos.erreur429Timer && (maintenant - infos.erreur429Timer < 900000)) {
-    console.log(`[Météo 429 Backoff] ${nomCarte} : Attente de déblocage API. Valeur connue : ${infos.pluiePrevue || 0} mm.`);
-    if (infos.pluiePrevue !== undefined) {
-      infos.ws.send("METEO:" + infos.pluiePrevue);
-    }
-    return;
-  }
+  const lat = parseFloat(infos.lat) || 50.75;
+  const lon = parseFloat(infos.lon) || 2.61;
 
   try {
-    const lat = parseFloat(infos.lat) || 50.75;
-    const lon = parseFloat(infos.lon) || 2.61;
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
+    // REQUÊTE EXCLUSIVE MÉTÉO-FRANCE AROME (1.3 km de maille)
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&models=meteofrance_arome&timezone=Europe%2FParis`;
 
-    // Envoi avec un User-Agent propre pour éviter le blocage d'IP partagée Render
     const reponse = await fetch(url, {
       headers: {
-        'User-Agent': 'KinconyWaterSystem/1.0 (RainMonitoringApp)'
+        'User-Agent': 'KinconyMeteoFranceArome/1.0 (RainMonitoringApp)'
       }
     });
 
-    if (reponse.status === 429) {
-      infos.erreur429Timer = maintenant;
-      console.log(`[Météo 429] Limite d'appels temporaire atteinte sur Open-Météo pour ${nomCarte}.`);
-      if (infos.pluiePrevue !== undefined) {
-        infos.ws.send("METEO:" + infos.pluiePrevue);
-      }
-      return;
-    }
-
-    if (!reponse.ok) throw new Error(`Code réponse API : ${reponse.status}`);
+    if (!reponse.ok) throw new Error(`Code réponse Météo-France AROME : ${reponse.status}`);
 
     const data = await reponse.json();
     infos.tempsDerniereMeteo = maintenant;
-    delete infos.erreur429Timer;
 
     const heureActuelle = new Date().getTime();
     let indexDepart = data.hourly.time.findIndex(t => new Date(t).getTime() >= heureActuelle);
@@ -753,7 +735,7 @@ async function verifierPluieCarte(nomCarte, force = false) {
     }
 
     infos.pluiePrevue = pluieTotale.toFixed(1);
-    console.log(`[Météo Succès] ${nomCarte} : ${infos.pluiePrevue} mm prévus.`);
+    console.log(`[Météo-France AROME Succès] ${nomCarte} : ${infos.pluiePrevue} mm prévus (AROME 1.3km).`);
 
     if (infos.ws && infos.ws.readyState === WebSocket.OPEN) {
       infos.ws.send("METEO:" + infos.pluiePrevue);
@@ -778,7 +760,7 @@ async function verifierPluieCarte(nomCarte, force = false) {
           if (!relais1Allume) {
              infos.ws.send("R1_ON");
              infos.etat = infos.etat | 1;
-             ecrireHistorique(`${nomCarte} : DANGER DÉBORDEMENT (${pluieLitrePrevu.toFixed(0)}L attendus pour ${espaceLibre.toFixed(0)}L d'espace). Ouverture Vanne jusqu'à ${infos.arretMeteoVolumeCible.toFixed(0)}L.`);
+             ecrireHistorique(`${nomCarte} : DANGER DÉBORDEMENT AROME (${pluieLitrePrevu.toFixed(0)}L attendus pour ${espaceLibre.toFixed(0)}L d'espace). Ouverture Vanne jusqu'à ${infos.arretMeteoVolumeCible.toFixed(0)}L.`);
           }
        }
     } else if (pluieTotale > 10 && surfaceToit === 0) {
@@ -787,7 +769,7 @@ async function verifierPluieCarte(nomCarte, force = false) {
        if (!relais1Allume) {
          infos.ws.send("R1_ON");
          infos.etat = infos.etat | 1;
-         ecrireHistorique(`${nomCarte} : Alerte Pluie Classique (>10mm) -> Allumage`);
+         ecrireHistorique(`${nomCarte} : Alerte Pluie Classique AROME (>10mm) -> Allumage`);
        }
     }
 
@@ -801,7 +783,8 @@ async function verifierPluieCarte(nomCarte, force = false) {
       }
     }
   } catch (erreur) {
-    console.log(`[Erreur Météo ${nomCarte}] :`, erreur.message);
+    console.log(`[Erreur Météo-France AROME ${nomCarte}] :`, erreur.message);
+    // Aucun service de secours : si Météo-France AROME échoue, l'écran affichera simplement "--"
   }
 }
 
