@@ -20,13 +20,13 @@ try {
       scopes: ['https://www.googleapis.com/auth/spreadsheets']
     });
     console.log("[Système] Authentification Google Sheets prête.");
-    chargerHistoriqueLongTableau(); // Nouvelle fonction de chargement au boot
+    chargerHistoriqueLongTableau(); // Chargement au boot
   }
 } catch (erreur) {
   console.log("[Erreur] Impossible de lire la clé Google :", erreur.message);
 }
 
-// Faille 4 : Buffer mémoire pour éviter d'exploser le Quota Google API
+// Buffer mémoire pour éviter d'exploser le Quota Google API
 let eventsBuffer = [];
 
 function ecrireHistorique(evenement) {
@@ -36,11 +36,11 @@ function ecrireHistorique(evenement) {
   console.log(`[Événement Bufferisé en RAM] : ${evenement}`);
 }
 
-// Chasse d'eau du Buffer (Flush) effectuée toutes les minutes vers Google Sheets
+// Flush du Buffer vers Google Sheets toutes les minutes
 setInterval(async () => {
   if (eventsBuffer.length > 0 && authGoogle && process.env.SPREADSHEET_ID) {
     const lignesASauver = [...eventsBuffer];
-    eventsBuffer = []; // On vide immédiatement le buffer principal pour ne rater aucun nouvel event durant l'envoi
+    eventsBuffer = []; 
 
     try {
       const sheets = google.sheets({ version: 'v4', auth: authGoogle });
@@ -50,14 +50,13 @@ setInterval(async () => {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: lignesASauver }
       });
-      console.log(`[Synchronisation Google API] ${lignesASauver.length} événement(s) poussé(s) en rafale avec succès.`);
+      console.log(`[Synchronisation Google API] ${lignesASauver.length} événement(s) poussé(s) avec succès.`);
     } catch (erreur) {
       console.error("[Erreur Google API Flush]", erreur.message);
-      // Faille 4 (Backups) : En cas de panne internet temporaire, on remet les lignes dans le buffer pour le prochain cycle !
       eventsBuffer = lignesASauver.concat(eventsBuffer);
     }
   }
-}, 60000); // 1 Requête maximum par minute (Ultra safe pour les quotas)
+}, 60000);
 
 // Fonction de chargement de l'onglet Feuille_Volume au démarrage
 async function chargerHistoriqueLongTableau() {
@@ -72,12 +71,10 @@ async function chargerHistoriqueLongTableau() {
     if (rows && rows.length > 0) { 
       let count = 0;
       rows.forEach((row, index) => {
-        // Tolérance: même si c'est la ligne 0, on essaye de la lire (au cas où il n'y a pas d'en-tête texte)
         if(row.length >= 3 && (row[0].includes('20') || row[0].includes('/'))) { 
            let time;
            const s = String(row[0]);
            if (s.includes('/')) { 
-              // Récupération d'une date convertie par Google Sheets au format DD/MM/YYYY HH:MM:SS
               const espace = s.split(' ');
               if (espace.length >= 2) {
                   const d = espace[0].split('/');
@@ -87,12 +84,12 @@ async function chargerHistoriqueLongTableau() {
                   } else time = new Date(s).getTime();
               } else time = new Date(s).getTime();
            } else {
-              time = new Date(s).getTime(); // ISO natif
+              time = new Date(s).getTime();
            }
            if (isNaN(time)) return; 
 
            const nom = row[1];
-           const vol = parseFloat(String(row[2]).replace(',', '.')); // Corrige format FR
+           const vol = parseFloat(String(row[2]).replace(',', '.'));
            
            if (!registreCartes.has(nom)) {
              registreCartes.set(nom, { etat: 0, derniereVue: 0, historiqueVolume: [], historiqueLong: [] });
@@ -110,7 +107,7 @@ async function chargerHistoriqueLongTableau() {
   }
 }
 
-// L'Algorithme d'Échantillonnage en base de données : Exécute toutes les 5 minutes
+// Algorithme d'échantillonnage (toutes les 5 minutes)
 setInterval(async () => {
   if (!authGoogle || !process.env.SPREADSHEET_ID) return;
   const sheets = google.sheets({ version: 'v4', auth: authGoogle });
@@ -120,7 +117,7 @@ setInterval(async () => {
 
   for (const [nom, infos] of registreCartes.entries()) {
     if (infos.historiqueVolume && infos.historiqueVolume.length > 0) {
-      const dataRecentes = infos.historiqueVolume.filter(p => (timeNow - p.time) < 300000); // points des 5 dernières ms
+      const dataRecentes = infos.historiqueVolume.filter(p => (timeNow - p.time) < 300000);
       if (dataRecentes.length > 0) {
         let somme = 0;
         dataRecentes.forEach(p => somme += p.volume);
@@ -129,10 +126,9 @@ setInterval(async () => {
         if (!infos.historiqueLong) infos.historiqueLong = [];
         infos.historiqueLong.push({ time: timeNow, volume: moyenne });
         
-        // Sécurité mémoire (on ne garde en RAM que ~2 mois d'historique)
         if (infos.historiqueLong.length > 18000) infos.historiqueLong.shift();
         
-        nouvellesLignes.push([dateIso, nom, moyenne.toString().replace('.', ',')]); // Conversion vers FR facile
+        nouvellesLignes.push([dateIso, nom, moyenne.toString().replace('.', ',')]);
       }
     }
   }
@@ -145,12 +141,12 @@ setInterval(async () => {
         valueInputOption: 'USER_ENTERED',
         requestBody: { values: nouvellesLignes }
       });
-      console.log(`[Écriture Base Volume] ${nouvellesLignes.length} points de moyennes compressées sauvegardés.`);
+      console.log(`[Écriture Base Volume] ${nouvellesLignes.length} points sauvegardés.`);
     } catch(err) {
-       console.error("[Écriture Base Volume] Échec de la sauvegarde Cloud:", err.message);
+       console.error("[Écriture Base Volume] Échec:", err.message);
     }
   }
-}, 300000); // 5 minutes
+}, 300000);
 
 // --- 1. L'INTERFACE WEB (TABLEAU DE BORD) ---
 app.get('/', (req, res) => {
@@ -336,7 +332,6 @@ app.get('/', (req, res) => {
           const carteId = 'carte-ui-' + safeNom;
           let el = document.getElementById(carteId);
           
-          // CRÉATION INITIALE SI ELLE N'EXISTE PAS ENCORE DANS LE HTML
           if (!el) {
              const statusClass = carte.enLigne ? "online" : "offline";
              const statusIcon = carte.enLigne ? "🟢" : "🔴";
@@ -345,10 +340,10 @@ app.get('/', (req, res) => {
              
              let relaisHtml = '';
              for(let i=1; i<=6; i++) {
-               relaisHtml += '<div class="card off" id="r-card-' + safeNom + '-' + i + '">' +
-                 '<div class="relais-title"><span class="indicator"></span> R' + i + '</div>' +
-                 '<button id="r-btn-' + safeNom + '-' + i + '" class="action-btn btn-on" onclick="envoyerOrdre(\\'' + carte.nom + '\\', \\'' + i + '\\', \\'ON\\')">Activer</button>' +
-               '</div>';
+                relaisHtml += '<div class="card off" id="r-card-' + safeNom + '-' + i + '">' +
+                  '<div class="relais-title"><span class="indicator"></span> R' + i + '</div>' +
+                  '<button id="r-btn-' + safeNom + '-' + i + '" class="action-btn btn-on" onclick="envoyerOrdre(\\'' + carte.nom + '\\', \\'' + i + '\\', \\'ON\\')">Activer</button>' +
+                '</div>';
              }
              
              let newCarteTemplate = document.createElement("div");
@@ -376,11 +371,9 @@ app.get('/', (req, res) => {
                '<div class="container">' + relaisHtml + '</div>';
                
              container.appendChild(newCarteTemplate);
-             // On demande implicitement le chargement de l'historique sur 1 Jour via websocket au premier affichage
              demanderHistorique(carte.nom, '1d', null);
           } 
           
-          // MISE A JOUR CIBLEE DANS LE HTML EXISTANT SANS RIEN DÉTRUIRE (ADIEU LES FLASHS)
           el = document.getElementById(carteId);
           if (el) {
              const statLabel = carte.enLigne ? "🟢 En ligne" : "🔴 Hors ligne";
@@ -396,11 +389,9 @@ app.get('/', (req, res) => {
                  document.getElementById('fill-' + safeNom).style.height = carte.pourcentage + '%';
                  document.getElementById('filltext-' + safeNom).innerText = carte.pourcentage + '%';
                  
-                 // Ajout astucieux de la mesure en direct dans le chart existant
                  majDernierPointGraphique(carte.nom, carte.volume);
              }
              
-             // Update des switch relais :
              for(let i=1; i<=6; i++) {
                 const estOn = (carte.etat & (1 << (i-1)));
                 const rCard = document.getElementById('r-card-' + safeNom + '-' + i);
@@ -438,15 +429,14 @@ app.get('/', (req, res) => {
 
       function majDernierPointGraphique(nom, volume) {
           if (chartsMemory[nom]) {
-              const timeLbl = new Date().toLocaleTimeString('fr-FR').substring(0, 5); // Ex: 10:45
-              // On jette un oeil à la date du dernier point, pour ne vérifier et rafraichir qu'occasionnellement
+              const timeLbl = new Date().toLocaleTimeString('fr-FR').substring(0, 5);
               const len = chartsMemory[nom].data.labels.length;
               if (len > 0) {
                   const lastLbl = chartsMemory[nom].data.labels[len - 1];
                   if (lastLbl !== timeLbl) {
                       chartsMemory[nom].data.labels.push(timeLbl);
                       chartsMemory[nom].data.datasets[0].data.push(volume);
-                      chartsMemory[nom].update('none'); // Update du direct sans animation !
+                      chartsMemory[nom].update('none');
                   }
               }
           }
@@ -456,7 +446,6 @@ app.get('/', (req, res) => {
          const ctx = document.getElementById('chart-' + nom);
          if(!ctx) return;
          
-         // Historique stocké dans la BDD
          const dataPoints = historiqueRecu.map(h => h.volume);
          const labels = historiqueRecu.map(h => {
              const d = new Date(h.time);
@@ -479,13 +468,13 @@ app.get('/', (req, res) => {
                      backgroundColor: 'rgba(56, 189, 248, 0.2)',
                      fill: true,
                      tension: 0.4,
-                     pointRadius: (periodeChoisie === '1d') ? 0 : 2 // points trop tassés sur 24h
+                     pointRadius: (periodeChoisie === '1d') ? 0 : 2
                  }]
              },
              options: {
                  responsive: true,
                  maintainAspectRatio: false,
-                 animation: { duration: 600 }, // Une jolie petite animation puisqu'on recharge tout
+                 animation: { duration: 600 },
                  plugins: {
                      legend: { labels: { color: '#f8fafc', font: { size: 14 } } }
                  },
@@ -514,7 +503,6 @@ app.get('/', (req, res) => {
 // --- 2. GESTION DES COMMUNICATIONS WEBSOCKETS ---
 wss.on('connection', (ws) => {
 
-  // Gère la déconnexion propre du Wi-Fi
   ws.on('close', () => {
     for (const [nom, infos] of registreCartes.entries()) {
       if (infos.ws === ws) {
@@ -536,11 +524,9 @@ wss.on('connection', (ws) => {
         const surfaceT = parts.length >= 5 ? parseFloat(parts[4]) : 0; 
         
         if (!registreCartes.has(nom)) {
-           // Création initiale
            registreCartes.set(nom, { ws: ws, lat: parts[2], lon: parts[3], surface: surfaceT, etat: 0, derniereVue: Date.now(), historiqueVolume: [], historiqueLong: [] });
            console.log(`[Nouvelle Carte] ${nom} enregistrée. (Toit: ${surfaceT}m²)`);
         } else {
-           // Mise à jour vitale sans écraser la mémoire RAM et les historiques !
            const infos = registreCartes.get(nom);
            infos.ws = ws;
            infos.lat = parts[2];
@@ -551,11 +537,8 @@ wss.on('connection', (ws) => {
         }
         
         diffuserMiseAJourWeb();
-        const infosCarte = registreCartes.get(nom);
-        if (infosCarte && infosCarte.pluiePrevue && ws.readyState === WebSocket.OPEN) {
-          ws.send("METEO:" + infosCarte.pluiePrevue);
-        }
-        verifierPluieGlobal();
+        // Interroger la météo immédiatement pour cette carte
+        verifierPluieCarte(nom);
       }
     }
     else if (data.startsWith("STATE:")) {
@@ -578,10 +561,9 @@ wss.on('connection', (ws) => {
             infos.historiqueVolume.push({ time: Date.now(), volume: volume });
             if (infos.historiqueVolume.length > 100) infos.historiqueVolume.shift();
             
-            // --- CHIEN DE GARDE MÉTÉO EN DIRECT ---
             if (infos.arretMeteoVolumeCible !== undefined && (infos.etat & 1) !== 0) {
                if (infos.volume <= infos.arretMeteoVolumeCible) {
-                   infos.ws.send("R1_OFF"); // On ferme l'eau, objectif atteint !
+                   infos.ws.send("R1_OFF");
                    infos.etat = infos.etat & ~1;
                    ecrireHistorique(`${nom} : Plafond sécurisé (Descendu à ${infos.volume}L). Objectif Météo Atteint -> Fermeture Vanne.`);
                    delete infos.arretMeteoVolumeCible;
@@ -599,7 +581,7 @@ wss.on('connection', (ws) => {
       const parts = data.split("-");
       if (parts.length >= 3) {
         const nomCarte = parts[1];
-        const periode = parts[2]; // '1d', '1w', '1m'
+        const periode = parts[2];
         
         if (registreCartes.has(nomCarte)) {
             const infos = registreCartes.get(nomCarte);
@@ -619,12 +601,10 @@ wss.on('connection', (ws) => {
                 intervalleMillis = 14400000; 
             }
             
-            // Fusionner la base de données profonde et les données en direct de la RAM !
             let ensemblePoints = [];
             if (infos.historiqueLong) ensemblePoints = ensemblePoints.concat(infos.historiqueLong);
             if (infos.historiqueVolume) ensemblePoints = ensemblePoints.concat(infos.historiqueVolume);
             
-            // Trier par date
             ensemblePoints.sort((a,b) => a.time - b.time);
 
             if (ensemblePoints.length > 0) {
@@ -643,7 +623,6 @@ wss.on('connection', (ws) => {
       }
     }
     else if (data.indexOf('-') !== -1 && !data.startsWith("GET_CHART_HISTORY-")) {
-      // Faille 5 : Détection des paquets visant le contrôle des relais
       if (data.startsWith(CODE_SECRET + "-")) {
         const parts = data.split("-");
         if (parts.length >= 3) {
@@ -661,8 +640,7 @@ wss.on('connection', (ws) => {
           }
         }
       } else {
-        // [ANTI BRUTE-FORCE] PIN invalide détecté -> On kick physiquement le client !
-        console.log("[Alerte Sécurité] Tentative d'accès non autorisée. (Bruteforce PIN). Kick matériel.");
+        console.log("[Alerte Sécurité] Tentative d'accès non autorisée. Kick matériel.");
         ws.terminate();
       }
     }
@@ -671,11 +649,11 @@ wss.on('connection', (ws) => {
 
 function diffuserMiseAJourWeb() {
   const resume = [];
-  const socketsHardware = new Set(); // Registre pour identifier les ESP32
+  const socketsHardware = new Set();
 
   for (const [nom, infos] of registreCartes.entries()) {
     const enLigne = (infos.ws && infos.ws.readyState === WebSocket.OPEN);
-    if (infos.ws) socketsHardware.add(infos.ws); // Mémorise le canal des cartes physiques
+    if (infos.ws) socketsHardware.add(infos.ws);
     
     resume.push({
       nom: nom,
@@ -689,8 +667,6 @@ function diffuserMiseAJourWeb() {
   
   const json = JSON.stringify({ type: "UPDATE", liste: resume });
   
-  // On ne diffuse le gros JSON d'état qu'aux interfaces Web (Navigateurs) !
-  // On épargne la mémoire et la bande passante des pauvres petites ESP32.
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN && !socketsHardware.has(client)) {
        client.send(json);
@@ -698,7 +674,7 @@ function diffuserMiseAJourWeb() {
   });
 }
 
-// --- 3. LE CHIEN DE GARDE (WATCHDOG) ---
+// --- 3. WATCHDOG ---
 setInterval(() => {
   const maintenant = Date.now();
   let changementDetecte = false;
@@ -718,103 +694,97 @@ setInterval(() => {
 }, 10000);
 
 // --- 4. LE CERVEAU MÉTÉO AUTOMATISÉ ---
-let tempsDerniereMeteo = 0; // La mémoire de la dernière vérification
+async function verifierPluieCarte(nomCarte, force = false) {
+  const infos = registreCartes.get(nomCarte);
+  if (!infos || !infos.ws || infos.ws.readyState !== WebSocket.OPEN) return;
 
-async function verifierPluieGlobal() {
   const maintenant = Date.now();
-
-  // LE BOUCLIER : 1 heure = 3 600 000 millisecondes
-  if (tempsDerniereMeteo !== 0 && (maintenant - tempsDerniereMeteo < 3600000)) {
-    console.log("[Météo] Requête ignorée : La dernière vérification date de moins d'une heure.");
-    return; // On annule l'exécution de la suite
+  if (!force && infos.tempsDerniereMeteo && (maintenant - infos.tempsDerniereMeteo < 3600000)) {
+    // Renvoyer immédiatement la valeur connue à la carte si déjà calculée
+    if (infos.pluiePrevue !== undefined) {
+      infos.ws.send("METEO:" + infos.pluiePrevue);
+    }
+    return;
   }
 
-  // Si le bouclier est passé, on mémorise l'heure actuelle pour bloquer les requêtes suivantes
-  tempsDerniereMeteo = maintenant;
+  infos.tempsDerniereMeteo = maintenant;
 
-  for (const [nom, infos] of registreCartes.entries()) {
-    if (!infos.ws || infos.ws.readyState !== WebSocket.OPEN) continue;
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${infos.lat}&longitude=${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
+    const reponse = await fetch(url);
 
-    try {
-      const url = `https://api.open-meteo.com/v1/forecast?latitude=${infos.lat}&longitude=${infos.lon}&hourly=precipitation&timezone=Europe%2FParis&forecast_days=3`;
-      const reponse = await fetch(url);
+    if (!reponse.ok) throw new Error(`Open-Météo a refusé (Code : ${reponse.status})`);
 
-      if (!reponse.ok) throw new Error(`Open-Météo a refusé (Code : ${reponse.status})`);
+    const data = await reponse.json();
+    const heureActuelle = new Date().getTime();
+    let indexDepart = data.hourly.time.findIndex(t => new Date(t).getTime() >= heureActuelle);
+    if (indexDepart === -1) indexDepart = 0;
 
-      const data = await reponse.json();
-      const heureActuelle = new Date().getTime();
-      let indexDepart = data.hourly.time.findIndex(t => new Date(t).getTime() >= heureActuelle);
-      if (indexDepart === -1) indexDepart = 0;
-
-      let pluieTotale = 0;
-      for (let i = indexDepart; i < indexDepart + 48 && i < data.hourly.precipitation.length; i++) {
-        pluieTotale += data.hourly.precipitation[i];
-      }
-
-      infos.pluiePrevue = pluieTotale.toFixed(1); // Enregistrement pour le Dashboard
-      if (infos.ws && infos.ws.readyState === WebSocket.OPEN) {
-        infos.ws.send("METEO:" + infos.pluiePrevue);
-      }
-      diffuserMiseAJourWeb(); // Met à jour l'interface avec la nouvelle météo
-
-      console.log(`[Météo] ${nom} : ${infos.pluiePrevue} mm prévus.`);
-
-      // SMART DRAINING
-      let actionMeteoRequise = false;
-      const surfaceToit = infos.surface ? infos.surface : 0;
-      
-      if (surfaceToit > 0 && infos.volume !== undefined && infos.pourcentage !== undefined && infos.pourcentage > 0) {
-         // Calcul en Litres
-         const pluieLitrePrevu = pluieTotale * surfaceToit; 
-         const capaciteMax = infos.volume / (infos.pourcentage / 100.0);
-         const espaceLibre = capaciteMax - infos.volume;
-         
-         // Si la pluie prévue menace de faire déborder (+ marge de sécurité de 50L)
-         if (pluieLitrePrevu > espaceLibre + 50) {
-            actionMeteoRequise = true;
-            const surplus = pluieLitrePrevu - espaceLibre;
-            infos.arretMeteoVolumeCible = infos.volume - surplus;
-            if (infos.arretMeteoVolumeCible < 0) infos.arretMeteoVolumeCible = 0; // Sécurité
-
-            const relais1Allume = (infos.etat & 1) !== 0;
-            if (!relais1Allume) {
-               infos.ws.send("R1_ON");
-               infos.etat = infos.etat | 1;
-               ecrireHistorique(`${nom} : DANGER DÉBORDEMENT (${pluieLitrePrevu.toFixed(0)}L d'eau attendus pour ${espaceLibre.toFixed(0)}L d'espace). Ouverture Vanne jusqu'à ${infos.arretMeteoVolumeCible.toFixed(0)}L.`);
-            }
-         }
-      } else if (pluieTotale > 10 && surfaceToit === 0) {
-         // Fallback classique si la surface n'est pas configurée
-         actionMeteoRequise = true;
-         const relais1Allume = (infos.etat & 1) !== 0;
-         if (!relais1Allume) {
-           infos.ws.send("R1_ON");
-           infos.etat = infos.etat | 1;
-           ecrireHistorique(`${nom} : Alerte Pluie Classique (>10mm) -> Allumage`);
-         }
-      }
-
-      // Si aucune action n'est requise, on coupe (seulement si la météo l'avait ordonné)
-      if (!actionMeteoRequise) {
-        const relais1Allume = (infos.etat & 1) !== 0;
-        if (relais1Allume && infos.arretMeteoVolumeCible !== undefined) {
-           infos.ws.send("R1_OFF");
-           infos.etat = infos.etat & ~1;
-           ecrireHistorique(`${nom} : Risque Météo Écarté -> Fermeture.`);
-           delete infos.arretMeteoVolumeCible;
-        }
-      }
-
-    } catch (erreur) {
-      console.error(`[Erreur Météo] Problème avec ${nom} :`, erreur.message);
+    let pluieTotale = 0;
+    for (let i = indexDepart; i < indexDepart + 48 && i < data.hourly.precipitation.length; i++) {
+      pluieTotale += data.hourly.precipitation[i];
     }
+
+    infos.pluiePrevue = pluieTotale.toFixed(1);
+    console.log(`[Météo] ${nomCarte} : ${infos.pluiePrevue} mm prévus.`);
+
+    // Transmettre la prévision météo à la carte hardware en WebSocket !
+    if (infos.ws && infos.ws.readyState === WebSocket.OPEN) {
+      infos.ws.send("METEO:" + infos.pluiePrevue);
+    }
+    diffuserMiseAJourWeb();
+
+    // SMART DRAINING
+    let actionMeteoRequise = false;
+    const surfaceToit = infos.surface ? infos.surface : 0;
+    
+    if (surfaceToit > 0 && infos.volume !== undefined && infos.pourcentage !== undefined && infos.pourcentage > 0) {
+       const pluieLitrePrevu = pluieTotale * surfaceToit; 
+       const capaciteMax = infos.volume / (infos.pourcentage / 100.0);
+       const espaceLibre = capaciteMax - infos.volume;
+       
+       if (pluieLitrePrevu > espaceLibre + 50) {
+          actionMeteoRequise = true;
+          const surplus = pluieLitrePrevu - espaceLibre;
+          infos.arretMeteoVolumeCible = infos.volume - surplus;
+          if (infos.arretMeteoVolumeCible < 0) infos.arretMeteoVolumeCible = 0;
+
+          const relais1Allume = (infos.etat & 1) !== 0;
+          if (!relais1Allume) {
+             infos.ws.send("R1_ON");
+             infos.etat = infos.etat | 1;
+             ecrireHistorique(`${nomCarte} : DANGER DÉBORDEMENT (${pluieLitrePrevu.toFixed(0)}L attendus pour ${espaceLibre.toFixed(0)}L d'espace). Ouverture Vanne jusqu'à ${infos.arretMeteoVolumeCible.toFixed(0)}L.`);
+          }
+       }
+    } else if (pluieTotale > 10 && surfaceToit === 0) {
+       actionMeteoRequise = true;
+       const relais1Allume = (infos.etat & 1) !== 0;
+       if (!relais1Allume) {
+         infos.ws.send("R1_ON");
+         infos.etat = infos.etat | 1;
+         ecrireHistorique(`${nomCarte} : Alerte Pluie Classique (>10mm) -> Allumage`);
+       }
+    }
+
+    if (!actionMeteoRequise) {
+      const relais1Allume = (infos.etat & 1) !== 0;
+      if (relais1Allume && infos.arretMeteoVolumeCible !== undefined) {
+         infos.ws.send("R1_OFF");
+         infos.etat = infos.etat & ~1;
+         ecrireHistorique(`${nomCarte} : Risque Météo Écarté -> Fermeture.`);
+         delete infos.arretMeteoVolumeCible;
+      }
+    }
+  } catch (erreur) {
+    console.log(`[Erreur Météo ${nomCarte}] :`, erreur.message);
   }
 }
 
-setInterval(verifierPluieGlobal, 3600000);
+async function verifierPluieGlobal() {
+  for (const [nom, infos] of registreCartes.entries()) {
+     await verifierPluieCarte(nom);
+  }
+}
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log('Serveur centralisé en ligne sur le port ' + PORT);
-});
-// --- FIN DU FICHIER ---
+// Vérification météo automatique toutes les heures pour toutes les cartes
+setInterval(verifierPluieGlobal, 3600000);
