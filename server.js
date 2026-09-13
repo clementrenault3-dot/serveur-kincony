@@ -248,6 +248,7 @@ wss.on('connection', (ws) => {
           delete infos.dernierEchecMeteo;
           console.log(`[Météo Directe reçue de ${nom}] : ${infos.pluiePrevue} mm (IP Maison).`);
           diffuserMiseAJourWeb();
+          evaluerRisqueDebordement(nom);
         }
       }
     }
@@ -445,49 +446,58 @@ async function verifierPluieCarte(nomCarte, force = false) {
     }
     diffuserMiseAJourWeb();
 
-    let actionMeteoRequise = false;
-    const surfaceToit = infos.surface ? infos.surface : 0;
-    
-    if (surfaceToit > 0 && infos.volume !== undefined && infos.pourcentage !== undefined && infos.pourcentage > 0) {
-       const pluieLitrePrevu = pluieTotale * surfaceToit; 
-       const capaciteMax = infos.volume / (infos.pourcentage / 100.0);
-       const espaceLibre = capaciteMax - infos.volume;
-       
-       if (pluieLitrePrevu > espaceLibre + 50) {
-          actionMeteoRequise = true;
-          const surplus = pluieLitrePrevu - espaceLibre;
-          infos.arretMeteoVolumeCible = infos.volume - surplus;
-          if (infos.arretMeteoVolumeCible < 0) infos.arretMeteoVolumeCible = 0;
-
-          const relais1Allume = (infos.etat & 1) !== 0;
-          if (!relais1Allume) {
-             infos.ws.send("R1_ON");
-             infos.etat = infos.etat | 1;
-             ecrireHistorique(`${nomCarte} : DANGER DÉBORDEMENT AROME (${pluieLitrePrevu.toFixed(0)}L attendus pour ${espaceLibre.toFixed(0)}L d'espace). Ouverture Vanne jusqu'à ${infos.arretMeteoVolumeCible.toFixed(0)}L.`);
-          }
-       }
-    } else if (pluieTotale > 10 && surfaceToit === 0) {
-       actionMeteoRequise = true;
-       const relais1Allume = (infos.etat & 1) !== 0;
-       if (!relais1Allume) {
-         infos.ws.send("R1_ON");
-         infos.etat = infos.etat | 1;
-         ecrireHistorique(`${nomCarte} : Alerte Pluie Classique AROME (>10mm) -> Allumage`);
-       }
-    }
-
-    if (!actionMeteoRequise) {
-      const relais1Allume = (infos.etat & 1) !== 0;
-      if (relais1Allume && infos.arretMeteoVolumeCible !== undefined) {
-         infos.ws.send("R1_OFF");
-         infos.etat = infos.etat & ~1;
-         ecrireHistorique(`${nomCarte} : Risque Météo Écarté -> Fermeture.`);
-         delete infos.arretMeteoVolumeCible;
-      }
-    }
+    evaluerRisqueDebordement(nomCarte);
   } catch (erreur) {
     infos.dernierEchecMeteo = maintenant;
     console.log(`[Erreur Météo-France AROME ${nomCarte}] :`, erreur.message);
+  }
+}
+
+function evaluerRisqueDebordement(nomCarte) {
+  const infos = registreCartes.get(nomCarte);
+  if (!infos || !infos.ws || infos.ws.readyState !== WebSocket.OPEN) return;
+  if (infos.pluiePrevue === undefined || isNaN(parseFloat(infos.pluiePrevue))) return;
+
+  const pluieTotale = parseFloat(infos.pluiePrevue);
+  let actionMeteoRequise = false;
+  const surfaceToit = infos.surface ? infos.surface : 0;
+  
+  if (surfaceToit > 0 && infos.volume !== undefined && infos.pourcentage !== undefined && infos.pourcentage > 0) {
+     const pluieLitrePrevu = pluieTotale * surfaceToit; 
+     const capaciteMax = infos.volume / (infos.pourcentage / 100.0);
+     const espaceLibre = capaciteMax - infos.volume;
+     
+     if (pluieLitrePrevu > espaceLibre + 50) {
+        actionMeteoRequise = true;
+        const surplus = pluieLitrePrevu - espaceLibre;
+        infos.arretMeteoVolumeCible = infos.volume - surplus;
+        if (infos.arretMeteoVolumeCible < 0) infos.arretMeteoVolumeCible = 0;
+
+        const relais1Allume = (infos.etat & 1) !== 0;
+        if (!relais1Allume) {
+           infos.ws.send("R1_ON");
+           infos.etat = infos.etat | 1;
+           ecrireHistorique(`${nomCarte} : DANGER DÉBORDEMENT AROME (${pluieLitrePrevu.toFixed(0)}L attendus pour ${espaceLibre.toFixed(0)}L d'espace libre). Ouverture Vanne (R1) jusqu'à ${infos.arretMeteoVolumeCible.toFixed(0)}L.`);
+        }
+     }
+  } else if (pluieTotale > 10 && surfaceToit === 0) {
+     actionMeteoRequise = true;
+     const relais1Allume = (infos.etat & 1) !== 0;
+     if (!relais1Allume) {
+       infos.ws.send("R1_ON");
+       infos.etat = infos.etat | 1;
+       ecrireHistorique(`${nomCarte} : Alerte Pluie Classique AROME (>10mm) -> Allumage Vanne (R1)`);
+     }
+  }
+
+  if (!actionMeteoRequise) {
+    const relais1Allume = (infos.etat & 1) !== 0;
+    if (relais1Allume && infos.arretMeteoVolumeCible !== undefined) {
+       infos.ws.send("R1_OFF");
+       infos.etat = infos.etat & ~1;
+       ecrireHistorique(`${nomCarte} : Risque Météo Écarté -> Fermeture Vanne (R1).`);
+       delete infos.arretMeteoVolumeCible;
+    }
   }
 }
 
