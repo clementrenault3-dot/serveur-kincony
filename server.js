@@ -538,7 +538,7 @@ wss.on('connection', (ws) => {
         
         diffuserMiseAJourWeb();
         // Interroger la météo AROME immédiatement pour cette carte
-        verifierPluieCarte(nom);
+        verifierPluieCarte(nom, true);
       }
     }
     else if (data.startsWith("STATE:")) {
@@ -571,6 +571,11 @@ wss.on('connection', (ws) => {
             }
           }
           diffuserMiseAJourWeb();
+
+          // Si la carte n'a pas encore reçu sa météo, retenter la récupération AROME
+          if (infos.pluiePrevue === undefined) {
+             verifierPluieCarte(nom);
+          }
         }
       }
     }
@@ -693,17 +698,21 @@ setInterval(() => {
   }
 }, 10000);
 
-// --- 4. LE CERVEAU MÉTÉO BASÉ EXCLUSIVEMENT SUR LE MODÈLE MÉTÉO-FRANCE AROME (SANS AUCUN SECOURS EXTERNE) ---
+// --- 4. LE CERVEAU MÉTÉO BASÉ SUR L'API DÉDIÉE MÉTÉO-FRANCE (AROME / ARPEGE) ---
 async function verifierPluieCarte(nomCarte, force = false) {
   const infos = registreCartes.get(nomCarte);
   if (!infos || !infos.ws || infos.ws.readyState !== WebSocket.OPEN) return;
 
   const maintenant = Date.now();
 
-  // Réutilisation du cache si la météo AROME a été consultée il y a moins de 2 heures
+  // 1. Si la météo AROME valide date de moins de 2h, renvoyer la valeur connue
   if (!force && infos.tempsDerniereMeteo && (maintenant - infos.tempsDerniereMeteo < 7200000) && infos.pluiePrevue !== undefined) {
-    console.log(`[Météo AROME] ${nomCarte} : Envoi de la valeur AROME en cache (${infos.pluiePrevue} mm).`);
     infos.ws.send("METEO:" + infos.pluiePrevue);
+    return;
+  }
+
+  // 2. Si un échec récent a eu lieu (< 2 min) et qu'on est en ré-essai, temporiser
+  if (!force && infos.dernierEchecMeteo && (maintenant - infos.dernierEchecMeteo < 120000)) {
     return;
   }
 
@@ -711,19 +720,23 @@ async function verifierPluieCarte(nomCarte, force = false) {
   const lon = parseFloat(infos.lon) || 2.61;
 
   try {
-    // REQUÊTE EXCLUSIVE MÉTÉO-FRANCE AROME (1.3 km de maille)
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&models=meteofrance_arome&timezone=Europe%2FParis`;
+    // API DÉDIÉE MÉTÉO-FRANCE (AROME / ARPEGE) - Évite le rate-limit de l'entrée globale
+    const url = `https://api.open-meteo.com/v1/meteofrance?latitude=${lat}&longitude=${lon}&hourly=precipitation&timezone=Europe%2FParis`;
 
     const reponse = await fetch(url, {
       headers: {
-        'User-Agent': 'KinconyMeteoFranceArome/1.0 (RainMonitoringApp)'
+        'User-Agent': 'KinconyMeteoFranceApp/1.0 (Contact: domotique@fletre.fr)'
       }
     });
 
-    if (!reponse.ok) throw new Error(`Code réponse Météo-France AROME : ${reponse.status}`);
+    if (!reponse.ok) {
+      infos.dernierEchecMeteo = maintenant;
+      throw new Error(`Code réponse API Météo-France : ${reponse.status}`);
+    }
 
     const data = await reponse.json();
     infos.tempsDerniereMeteo = maintenant;
+    delete infos.dernierEchecMeteo;
 
     const heureActuelle = new Date().getTime();
     let indexDepart = data.hourly.time.findIndex(t => new Date(t).getTime() >= heureActuelle);
@@ -735,7 +748,7 @@ async function verifierPluieCarte(nomCarte, force = false) {
     }
 
     infos.pluiePrevue = pluieTotale.toFixed(1);
-    console.log(`[Météo-France AROME Succès] ${nomCarte} : ${infos.pluiePrevue} mm prévus (AROME 1.3km).`);
+    console.log(`[Météo-France AROME Succès] ${nomCarte} : ${infos.pluiePrevue} mm prévus sur 48h.`);
 
     if (infos.ws && infos.ws.readyState === WebSocket.OPEN) {
       infos.ws.send("METEO:" + infos.pluiePrevue);
@@ -784,7 +797,6 @@ async function verifierPluieCarte(nomCarte, force = false) {
     }
   } catch (erreur) {
     console.log(`[Erreur Météo-France AROME ${nomCarte}] :`, erreur.message);
-    // Aucun service de secours : si Météo-France AROME échoue, l'écran affichera simplement "--"
   }
 }
 
@@ -794,8 +806,8 @@ async function verifierPluieGlobal() {
   }
 }
 
-// Vérification météo automatique toutes les heures pour toutes les cartes
-setInterval(verifierPluieGlobal, 3600000);
+// Boucle automatique de vérification toutes les 2 minutes pour rattraper tout échec éventuel
+setInterval(verifierPluieGlobal, 120000);
 
 // --- DEMARRAGE DU SERVEUR WEB ---
 const PORT = process.env.PORT || 3000;
