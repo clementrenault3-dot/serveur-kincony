@@ -1,11 +1,15 @@
 const express = require('express');
 const WebSocket = require('ws');
 const http = require('http');
+const path = require('path');
 const { google } = require('googleapis');
 
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+
+// Servir les fichiers statiques (HTML, CSS, images, logo, etc.) depuis le dossier public
+app.use(express.static(path.join(__dirname, 'public')));
 
 const CODE_SECRET = "1234";
 const registreCartes = new Map();
@@ -150,354 +154,7 @@ setInterval(async () => {
 
 // --- 1. L'INTERFACE WEB (TABLEAU DE BORD) ---
 app.get('/', (req, res) => {
-  const html = `
-  <!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Centre de Contrôle Domotique</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-      :root {
-        --bg-color: #0f172a;
-        --card-bg: rgba(30, 41, 59, 0.7);
-        --card-border: rgba(255, 255, 255, 0.1);
-        --text-main: #f8fafc;
-        --text-muted: #94a3b8;
-        --accent: #3b82f6;
-        --accent-hover: #2563eb;
-        --success: #10b981;
-        --danger: #ef4444;
-        --blur: blur(12px);
-      }
-      body { 
-        font-family: 'Inter', sans-serif; 
-        background-color: var(--bg-color); 
-        color: var(--text-main); 
-        margin: 0; 
-        padding: 20px;
-        min-height: 100vh;
-        background-image: radial-gradient(circle at top right, #1e1b4b, transparent 40%), radial-gradient(circle at bottom left, #0f172a, transparent 40%);
-      }
-      h1, h2 { font-weight: 700; color: #fff; text-align: center; margin-bottom: 30px; letter-spacing: -0.5px; }
-      
-      #ecran-login {
-        max-width: 350px; margin: 100px auto; padding: 40px;
-        background: var(--card-bg); backdrop-filter: var(--blur); border: 1px solid var(--card-border);
-        border-radius: 24px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-      }
-      input[type=password] { 
-        width: 100%; padding: 15px; margin-bottom: 20px; box-sizing: border-box;
-        background: rgba(0,0,0,0.2); border: 1px solid var(--card-border); border-radius: 12px;
-        color: white; font-size: 18px; text-align: center; outline: none; transition: border 0.3s;
-      }
-      input[type=password]:focus { border-color: var(--accent); }
-      .btn-login { 
-        background: var(--accent); color: white; border: none; padding: 15px 30px;
-        border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer;
-        transition: background 0.3s, transform 0.1s; width: 100%;
-      }
-      .btn-login:hover { background: var(--accent-hover); }
-      .btn-login:active { transform: scale(0.98); }
-
-      #ecran-app { display: none; max-width: 1000px; margin: 0 auto; }
-      
-      .carte-section { 
-        background: var(--card-bg); backdrop-filter: var(--blur); border: 1px solid var(--card-border);
-        border-radius: 20px; padding: 25px; margin-bottom: 30px; 
-        box-shadow: 0 10px 30px -5px rgba(0,0,0,0.3);
-      }
-      
-      .status-bar { 
-        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;
-        padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid var(--card-border);
-      }
-      .status-title { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; }
-      .status-badge { 
-        padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px;
-      }
-      .online .status-badge { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
-      .offline .status-badge { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
-      
-      .sensor-data { 
-        display: flex; gap: 15px; font-size: 15px; background: rgba(0,0,0,0.3); 
-        padding: 8px 16px; border-radius: 20px; color: var(--text-main); font-weight: 500;
-        border: 1px solid var(--card-border); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-      }
-      
-      .container { 
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; 
-      }
-      .dashboard-layout { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
-      .tank-column { width: 80px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
-      .tank-container {
-        width: 60px; height: 180px; background: rgba(255,255,255,0.05); border: 2px solid var(--card-border);
-        border-radius: 30px; position: relative; overflow: hidden; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); margin-bottom: 15px;
-      }
-      .tank-fill {
-        position: absolute; bottom: 0; width: 100%; background: linear-gradient(to top, #0ea5e9, #38bdf8);
-        transition: height 1s ease-out; box-shadow: 0 0 15px #38bdf8;
-      }
-      .chart-column { flex-grow: 1; min-width: 300px; background: rgba(0,0,0,0.2); border-radius: 15px; padding: 15px; border: 1px solid var(--card-border); min-height: 200px; display: flex; flex-direction: column; }
-      .chart-filters { display: flex; gap: 10px; margin-bottom: 10px; justify-content: flex-end; }
-      .filter-btn { background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--card-border); border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 500; cursor: pointer; transition: 0.2s; }
-      .filter-btn:hover, .filter-btn.active { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border-color: rgba(56, 189, 248, 0.5); }
-      .chart-wrapper { flex-grow: 1; position: relative; }
-      .card { 
-        background: rgba(255,255,255,0.03); border: 1px solid var(--card-border);
-        padding: 20px 15px; border-radius: 16px; text-align: center;
-        transition: transform 0.2s, background 0.3s;
-      }
-      .card:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
-      
-      .relais-title { 
-        font-size: 16px; font-weight: 600; color: var(--text-muted); margin-bottom: 15px;
-        display: flex; justify-content: center; align-items: center; gap: 8px;
-      }
-      .indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px currentColor; }
-      .on .indicator { background-color: var(--success); color: var(--success); }
-      .off .indicator { background-color: var(--text-muted); color: var(--text-muted); box-shadow: none; }
-      
-      button.action-btn { 
-        width: 100%; padding: 12px; cursor: pointer; border-radius: 10px; border: none; 
-        font-weight: 600; font-size: 14px; transition: all 0.2s;
-      }
-      .btn-on { background-color: var(--success); color: #fff; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
-      .btn-on:hover { background-color: #059669; }
-      .btn-off { background-color: rgba(255,255,255,0.1); color: var(--text-main); }
-      .btn-off:hover { background-color: rgba(255,255,255,0.2); }
-      button:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(1); box-shadow: none; }
-    </style>
-  </head>
-  <body>
-    <div id="ecran-login">
-      <h2>🔒 Verrouillage</h2>
-      <input type="password" id="pin-input" placeholder="Code PIN">
-      <button class="btn-login" onclick="validerPin()">Déverrouiller</button>
-    </div>
-    <div id="ecran-app">
-      <h1>Flotte Domotique ⚡</h1>
-      <div id="cartes-container">
-        <div style="text-align: center; color: var(--text-muted); height: 100px; display: flex; align-items: center; justify-content: center;">En attente de connexion...</div>
-      </div>
-    </div>
-    <script>
-      let codePin = localStorage.getItem("savedPin") || "";
-      const ws = new WebSocket('wss://' + window.location.host);
-      
-      ws.onopen = () => {
-        if (codePin) {
-          document.getElementById('ecran-login').style.display = 'none';
-          document.getElementById('ecran-app').style.display = 'block';
-          ws.send("GET_DASHBOARD"); 
-        }
-      };
-
-      function validerPin() {
-        codePin = document.getElementById('pin-input').value;
-        localStorage.setItem("savedPin", codePin);
-        document.getElementById('ecran-login').style.display = 'none';
-        document.getElementById('ecran-app').style.display = 'block';
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send("GET_DASHBOARD"); 
-        }
-      }
-
-      ws.onmessage = (event) => {
-        const msg = event.data;
-        if (msg.startsWith("{")) {
-            const data = JSON.parse(msg);
-            if (data.type === "UPDATE") majAffichageCartes(data.liste);
-            else if (data.type === "HISTORY_DATA") dessinerGraphique(data.nom, data.points, data.periode);
-        }
-      };
-
-      const chartsMemory = {};
-
-      function majAffichageCartes(listeCartes) {
-        if (listeCartes.length === 0) {
-            document.getElementById('cartes-container').innerHTML = "<div style='text-align: center; color: var(--text-muted);'>Aucune carte n'est actuellement détectée.</div>";
-            return;
-        }
-
-        let container = document.getElementById('cartes-container');
-        if (container.innerHTML.includes("Aucune carte") || container.innerHTML.includes("En attente")) {
-            container.innerHTML = "";
-        }
-
-        listeCartes.forEach(carte => {
-          const safeNom = carte.nom.replace(/_/g, '-');
-          const carteId = 'carte-ui-' + safeNom;
-          let el = document.getElementById(carteId);
-          
-          if (!el) {
-             const statusClass = carte.enLigne ? "online" : "offline";
-             const statusIcon = carte.enLigne ? "🟢" : "🔴";
-             const statusText = carte.enLigne ? "En ligne" : "Hors ligne";
-             const nomPropre = carte.nom.replace(/_/g, ' ');
-             
-             let relaisHtml = '';
-             for(let i=1; i<=6; i++) {
-                relaisHtml += '<div class="card off" id="r-card-' + safeNom + '-' + i + '">' +
-                  '<div class="relais-title"><span class="indicator"></span> R' + i + '</div>' +
-                  '<button id="r-btn-' + safeNom + '-' + i + '" class="action-btn btn-on" onclick="envoyerOrdre(\\'' + carte.nom + '\\', \\'' + i + '\\', \\'ON\\')">Activer</button>' +
-                '</div>';
-             }
-             
-             let newCarteTemplate = document.createElement("div");
-             newCarteTemplate.id = carteId;
-             newCarteTemplate.className = 'carte-section ' + statusClass;
-             newCarteTemplate.innerHTML = 
-               '<div class="status-bar">' +
-                 '<div class="status-title">' + nomPropre + ' <span class="status-badge" id="status-' + safeNom + '">' + statusIcon + ' ' + statusText + '</span></div>' + 
-                 '<div class="sensor-data"><span id="vol-' + safeNom + '">💧 0 L</span><span id="pct-' + safeNom + '">📊 0.0%</span><span id="meteo-' + safeNom + '" style="color:#60a5fa;">🌧️ -- mm (AROME)</span></div>' +
-               '</div>' +
-               '<div class="dashboard-layout">' +
-                 '<div class="tank-column">' +
-                    '<div class="tank-container"><div class="tank-fill" id="fill-' + safeNom + '" style="height: 0%;"></div></div>' +
-                    '<div style="font-weight:bold;color:#38bdf8;" id="filltext-' + safeNom + '">0.0%</div>' +
-                 '</div>' +
-                 '<div class="chart-column">' +
-                    '<div class="chart-filters">' +
-                        '<button class="filter-btn active" onclick="demanderHistorique(\\'' + carte.nom + '\\', \\'1d\\', this)">1 Jour</button>' +
-                        '<button class="filter-btn" onclick="demanderHistorique(\\'' + carte.nom + '\\', \\'1w\\', this)">1 Sem.</button>' +
-                        '<button class="filter-btn" onclick="demanderHistorique(\\'' + carte.nom + '\\', \\'1m\\', this)">1 Mois</button>' +
-                    '</div>' +
-                    '<div class="chart-wrapper"><canvas id="chart-' + carte.nom + '"></canvas></div>' +
-                 '</div>' +
-               '</div>' +
-               '<div class="container">' + relaisHtml + '</div>';
-               
-             container.appendChild(newCarteTemplate);
-             demanderHistorique(carte.nom, '1d', null);
-          } 
-          
-          el = document.getElementById(carteId);
-          if (el) {
-             const statLabel = carte.enLigne ? "🟢 En ligne" : "🔴 Hors ligne";
-             document.getElementById('status-' + safeNom).innerHTML = statLabel;
-             if (carte.enLigne) el.className = 'carte-section online';
-             else el.className = 'carte-section offline';
-
-             if (carte.volume !== null && carte.pourcentage !== null) {
-                 document.getElementById('vol-' + safeNom).innerText = '💧 ' + carte.volume + ' L';
-                 document.getElementById('pct-' + safeNom).innerText = '📊 ' + carte.pourcentage + '%';
-                 if (carte.pluie !== undefined) document.getElementById('meteo-' + safeNom).innerText = '🌧️ ' + carte.pluie + ' mm (AROME 48h)';
-
-                 document.getElementById('fill-' + safeNom).style.height = carte.pourcentage + '%';
-                 document.getElementById('filltext-' + safeNom).innerText = carte.pourcentage + '%';
-                 
-                 majDernierPointGraphique(carte.nom, carte.volume);
-             }
-             
-             for(let i=1; i<=6; i++) {
-                const estOn = (carte.etat & (1 << (i-1)));
-                const rCard = document.getElementById('r-card-' + safeNom + '-' + i);
-                const rBtn = document.getElementById('r-btn-' + safeNom + '-' + i);
-                if (!carte.enLigne) rBtn.setAttribute('disabled', 'true');
-                else rBtn.removeAttribute('disabled');
-                
-                if (estOn) {
-                    rCard.className = 'card on';
-                    rBtn.className = 'action-btn btn-off';
-                    rBtn.innerText = 'Désactiver';
-                    rBtn.setAttribute('onclick', 'envoyerOrdre(\\'' + carte.nom + '\\', \\'' + i + '\\', \\'OFF\\')');
-                } else {
-                    rCard.className = 'card off';
-                    rBtn.className = 'action-btn btn-on';
-                    rBtn.innerText = 'Activer';
-                    rBtn.setAttribute('onclick', 'envoyerOrdre(\\'' + carte.nom + '\\', \\'' + i + '\\', \\'ON\\')');
-                }
-             }
-          }
-        });
-      }
-
-      function demanderHistorique(nom, periode, boutonDOM) {
-          if (boutonDOM) {
-             const parent = boutonDOM.parentNode;
-             const boutons = parent.querySelectorAll('.filter-btn');
-             boutons.forEach(b => b.classList.remove('active'));
-             boutonDOM.classList.add('active');
-          }
-          if (ws.readyState === WebSocket.OPEN) {
-              ws.send("GET_CHART_HISTORY-" + nom + "-" + periode);
-          }
-      }
-
-      function majDernierPointGraphique(nom, volume) {
-          if (chartsMemory[nom]) {
-              const timeLbl = new Date().toLocaleTimeString('fr-FR').substring(0, 5);
-              const len = chartsMemory[nom].data.labels.length;
-              if (len > 0) {
-                  const lastLbl = chartsMemory[nom].data.labels[len - 1];
-                  if (lastLbl !== timeLbl) {
-                      chartsMemory[nom].data.labels.push(timeLbl);
-                      chartsMemory[nom].data.datasets[0].data.push(volume);
-                      chartsMemory[nom].update('none');
-                  }
-              }
-          }
-      }
-
-      function dessinerGraphique(nom, historiqueRecu, periodeChoisie) {
-         const ctx = document.getElementById('chart-' + nom);
-         if(!ctx) return;
-         
-         const dataPoints = historiqueRecu.map(h => h.volume);
-         const labels = historiqueRecu.map(h => {
-             const d = new Date(h.time);
-             if (periodeChoisie === '1d' || periodeChoisie === '1h') return d.toLocaleTimeString('fr-FR').substring(0, 5);
-             return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}).replace(",", " -");
-         });
-
-         if(chartsMemory[nom]) chartsMemory[nom].destroy();
-         
-         const timeLineDesc = (periodeChoisie==='1d') ? "Dernières 24h" : (periodeChoisie==='1w') ? "Derniers 7 Jours" : "Dernier Mois";
-
-         chartsMemory[nom] = new Chart(ctx, {
-             type: 'line',
-             data: {
-                 labels: labels,
-                 datasets: [{
-                     label: 'Volume (Litres) - ' + timeLineDesc,
-                     data: dataPoints,
-                     borderColor: '#38bdf8',
-                     backgroundColor: 'rgba(56, 189, 248, 0.2)',
-                     fill: true,
-                     tension: 0.4,
-                     pointRadius: (periodeChoisie === '1d') ? 0 : 2
-                 }]
-             },
-             options: {
-                 responsive: true,
-                 maintainAspectRatio: false,
-                 animation: { duration: 600 },
-                 plugins: {
-                     legend: { labels: { color: '#f8fafc', font: { size: 14 } } }
-                 },
-                 scales: {
-                     x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                     y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' }, min: 0 }
-                 }
-             }
-         });
-      }
-
-      function envoyerOrdre(nomCarte, numeroRelais, action) { 
-        if(ws.readyState === WebSocket.OPEN) {
-            ws.send(codePin + "-" + nomCarte + "-R" + numeroRelais + "_" + action); 
-        } else {
-            alert("Déconnecté du serveur !");
-        }
-      }
-    </script>
-  </body>
-  </html>
-  `;
-  res.send(html);
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // --- 2. GESTION DES COMMUNICATIONS WEBSOCKETS ---
@@ -576,6 +233,21 @@ wss.on('connection', (ws) => {
           if (infos.pluiePrevue === undefined) {
              verifierPluieCarte(nom);
           }
+        }
+      }
+    }
+    else if (data.startsWith("METEO_REPORT:")) {
+      const parts = data.split(":");
+      if (parts.length >= 3) {
+        const nom = parts[1];
+        const pluieVal = parseFloat(parts[2]);
+        if (registreCartes.has(nom) && !isNaN(pluieVal)) {
+          const infos = registreCartes.get(nom);
+          infos.pluiePrevue = pluieVal.toFixed(1);
+          infos.tempsDerniereMeteo = Date.now();
+          delete infos.dernierEchecMeteo;
+          console.log(`[Météo Directe reçue de ${nom}] : ${infos.pluiePrevue} mm (IP Maison).`);
+          diffuserMiseAJourWeb();
         }
       }
     }
@@ -711,27 +383,45 @@ async function verifierPluieCarte(nomCarte, force = false) {
     return;
   }
 
-  // 2. Si un échec récent a eu lieu (< 2 min) et qu'on est en ré-essai, temporiser
-  if (!force && infos.dernierEchecMeteo && (maintenant - infos.dernierEchecMeteo < 120000)) {
+  // 2. Si un échec 429 / rate-limit a eu lieu récemment (< 15 min), temporiser pour laisser débloquer l'IP
+  if (!force && infos.dernierEchecMeteo && (maintenant - infos.dernierEchecMeteo < 900000)) {
     return;
   }
 
   const lat = parseFloat(infos.lat) || 50.75;
   const lon = parseFloat(infos.lon) || 2.61;
 
-  try {
-    // API DÉDIÉE MÉTÉO-FRANCE (AROME / ARPEGE) - Évite le rate-limit de l'entrée globale
-    const url = `https://api.open-meteo.com/v1/meteofrance?latitude=${lat}&longitude=${lon}&hourly=precipitation&timezone=Europe%2FParis`;
+  // URLs à tester (URL principale + URL de secours avec le modèle AROME explicite)
+  const urls = [
+    `https://api.open-meteo.com/v1/meteofrance?latitude=${lat}&longitude=${lon}&hourly=precipitation&timezone=Europe%2FParis`,
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=precipitation&models=meteofrance_arome&timezone=Europe%2FParis`
+  ];
 
-    const reponse = await fetch(url, {
-      headers: {
-        'User-Agent': 'KinconyMeteoFranceApp/1.0 (Contact: domotique@fletre.fr)'
+  let reponse = null;
+  let reponseSucces = false;
+
+  for (const url of urls) {
+    try {
+      reponse = await fetch(url, {
+        headers: {
+          'User-Agent': 'KinconyMeteoFranceApp/2.0 (Contact: domotique@fletre.fr)'
+        }
+      });
+      if (reponse.ok) {
+        reponseSucces = true;
+        break;
       }
-    });
+    } catch (err) {
+      // continuer sur l'URL suivante
+    }
+  }
 
-    if (!reponse.ok) {
+  try {
+    if (!reponseSucces || !reponse) {
       infos.dernierEchecMeteo = maintenant;
-      throw new Error(`Code réponse API Météo-France : ${reponse.status}`);
+      const status = reponse ? reponse.status : 'Timeout/Erreur Réseau';
+      console.log(`[Météo-France AROME ${nomCarte}] Rate-limit ou indisponibilité (Code ${status}). Prochain essai dans 15 min.`);
+      return;
     }
 
     const data = await reponse.json();
@@ -796,6 +486,7 @@ async function verifierPluieCarte(nomCarte, force = false) {
       }
     }
   } catch (erreur) {
+    infos.dernierEchecMeteo = maintenant;
     console.log(`[Erreur Météo-France AROME ${nomCarte}] :`, erreur.message);
   }
 }
@@ -806,8 +497,8 @@ async function verifierPluieGlobal() {
   }
 }
 
-// Boucle automatique de vérification toutes les 2 minutes pour rattraper tout échec éventuel
-setInterval(verifierPluieGlobal, 120000);
+// Boucle automatique de vérification toutes les 15 minutes
+setInterval(verifierPluieGlobal, 900000);
 
 // --- DEMARRAGE DU SERVEUR WEB ---
 const PORT = process.env.PORT || 3000;
