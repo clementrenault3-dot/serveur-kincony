@@ -194,8 +194,8 @@ wss.on('connection', (ws) => {
         }
         
         diffuserMiseAJourWeb();
-        // Interroger la météo AROME immédiatement pour cette carte
-        verifierPluieCarte(nom, true);
+        // Interroger la météo AROME si pas encore connue (sans forcer le rate-limit)
+        verifierPluieCarte(nom, false);
       }
     }
     else if (data.startsWith("STATE:")) {
