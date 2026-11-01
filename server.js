@@ -19,6 +19,8 @@ const MAX_CARTES = 20;
 const NOM_CARTE_REGEX = /^[a-zA-Z0-9_-]{1,32}$/;
 
 const registreCartes = new Map();
+const cartesMasquees = new Set();
+const historiquePrecharge = new Map(); // Cache des points Google Sheets rattaché uniquement aux cartes actives
 
 // Protection Anti-Bruteforce par IP (Max 5 échecs -> Blocage 5 minutes)
 const tentativesParIP = new Map();
@@ -162,27 +164,23 @@ async function chargerHistoriqueLongTableau() {
            if (isNaN(time)) return; 
 
            const nom = String(row[1]).trim();
-           if (!NOM_CARTE_REGEX.test(nom)) return;
+           if (!NOM_CARTE_REGEX.test(nom) || cartesMasquees.has(nom)) return;
            const vol = parseFloat(String(row[2]).replace(',', '.'));
            if (isNaN(vol)) return;
            
-           if (!registreCartes.has(nom) && registreCartes.size < MAX_CARTES) {
-             registreCartes.set(nom, {
-               etat: 0,
-               capaciteMax: 3000,
-               surface: 100,
-               modeAutoMeteo: true,
-               derniereVue: 0,
-               historiqueVolume: [],
-               historiqueLong: []
-             });
+           // Stocker dans le cache préchargé sans créer de carte fantôme "Hors ligne" à l'écran
+           if (!historiquePrecharge.has(nom)) {
+             historiquePrecharge.set(nom, []);
            }
+           historiquePrecharge.get(nom).push({ time, volume: vol });
+
+           // Si la carte s'est déjà connectée pendant le chargement, lui rattacher ses points
            const carte = registreCartes.get(nom);
            if (carte) {
              if (!carte.historiqueLong) carte.historiqueLong = [];
              carte.historiqueLong.push({ time, volume: vol });
-             count++;
            }
+           count++;
         }
       });
       console.log(`[Base de données Volume] Données ressuscitées au démarrage : ${count} points.`);
@@ -334,8 +332,10 @@ wss.on('connection', (ws, req) => {
 
         ws.estHardware = true;
         ws.cartesAutorisees.add(nom);
+        cartesMasquees.delete(nom);
 
         if (!registreCartes.has(nom)) {
+           const histLongInitial = historiquePrecharge.has(nom) ? [...historiquePrecharge.get(nom)] : [];
            registreCartes.set(nom, {
              ws: ws,
              lat: lat,
@@ -346,7 +346,7 @@ wss.on('connection', (ws, req) => {
              etat: 0,
              derniereVue: Date.now(),
              historiqueVolume: [],
-             historiqueLong: []
+             historiqueLong: histLongInitial
            });
            console.log(`[Nouvelle Carte] ${nom} enregistrée. (Toit: ${surfaceT}m², Cuve: ${capaciteMax}L)`);
            ecrireHistorique(`${nom} : Carte connectée et initialisée (Toit ${surfaceT}m², Cuve ${capaciteMax}L).`, 'success');
@@ -512,7 +512,47 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
-    // --- F. BASCULEMENT DU MODE AUTOMATIQUE MÉTÉO ---
+    // --- F. BASCULEMENT DU MODE AUTOMATIQUE MÉTÉO & PURGE DES CARTES FANTÔMES ---
+    if (data.startsWith("DELETE_CARD:")) {
+      if (!ws.estAuthentifieWeb) {
+        ws.send(JSON.stringify({ type: "AUTH_REQUIRED" }));
+        return;
+      }
+      const nomCarte = data.substring(12).trim();
+      if (registreCartes.has(nomCarte)) {
+        const infos = registreCartes.get(nomCarte);
+        if (infos.ws) {
+          try { infos.ws.terminate(); } catch (e) {}
+        }
+        registreCartes.delete(nomCarte);
+        cartesMasquees.add(nomCarte);
+        ecrireHistorique(`${nomCarte} : Carte retirée de l'affichage par l'utilisateur.`, 'warning');
+        diffuserMiseAJourWeb();
+      }
+      return;
+    }
+
+    if (data === "PURGE_OFFLINE") {
+      if (!ws.estAuthentifieWeb) {
+        ws.send(JSON.stringify({ type: "AUTH_REQUIRED" }));
+        return;
+      }
+      let nbSupprimees = 0;
+      for (const [nom, infos] of registreCartes.entries()) {
+        const enLigne = Boolean(infos.ws && infos.ws.readyState === WebSocket.OPEN);
+        if (!enLigne) {
+          registreCartes.delete(nom);
+          cartesMasquees.add(nom);
+          nbSupprimees++;
+        }
+      }
+      if (nbSupprimees > 0) {
+        ecrireHistorique(`Purge d'affichage : ${nbSupprimees} ancienne(s) carte(s) hors-ligne supprimée(s).`, 'warning');
+        diffuserMiseAJourWeb();
+      }
+      return;
+    }
+
     if (data.startsWith("TOGGLE_AUTO:")) {
       if (!ws.estAuthentifieWeb) {
         ws.send(JSON.stringify({ type: "AUTH_REQUIRED" }));
