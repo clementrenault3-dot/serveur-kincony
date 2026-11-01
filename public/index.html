@@ -3,23 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Centre de Contrôle Domotique</title>
+  <title>Flotte Eau-Pilot — Centre de Contrôle Kincony B4</title>
   <link rel="icon" type="image/svg+xml" href="logo.svg">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     :root {
-      --bg-color: #0f172a;
-      --card-bg: rgba(30, 41, 59, 0.7);
+      --bg-color: #0b1120;
+      --card-bg: rgba(30, 41, 59, 0.72);
       --card-border: rgba(255, 255, 255, 0.1);
       --text-main: #f8fafc;
       --text-muted: #94a3b8;
-      --accent: #3b82f6;
-      --accent-hover: #2563eb;
+      --accent: #38bdf8;
+      --accent-strong: #0284c7;
       --success: #10b981;
+      --warning: #f59e0b;
       --danger: #ef4444;
-      --blur: blur(12px);
+      --blur: blur(14px);
     }
+
+    * { box-sizing: border-box; }
+
     body { 
       font-family: 'Inter', sans-serif; 
       background-color: var(--bg-color); 
@@ -27,33 +31,93 @@
       margin: 0; 
       padding: 20px;
       min-height: 100vh;
-      background-image: radial-gradient(circle at top right, #1e1b4b, transparent 40%), radial-gradient(circle at bottom left, #0f172a, transparent 40%);
+      background-image:
+        radial-gradient(circle at 85% 10%, rgba(14, 165, 233, 0.18), transparent 40%),
+        radial-gradient(circle at 15% 90%, rgba(16, 185, 129, 0.12), transparent 40%);
     }
-    
-    .header-bar {
+
+    /* --- EN-TÊTE GLOBAL --- */
+    .top-nav {
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
       gap: 15px;
-      margin-bottom: 30px;
+      margin-bottom: 28px;
+      padding: 14px 22px;
+      background: var(--card-bg);
+      backdrop-filter: var(--blur);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.35);
+    }
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
     }
     .app-logo {
-      width: 48px;
-      height: 48px;
+      width: 42px;
+      height: 42px;
       filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.5));
     }
-    h1, h2 { 
+    h1, h2, h3 { 
       font-weight: 700; 
       color: #fff; 
-      text-align: center; 
       margin: 0; 
-      letter-spacing: -0.5px; 
+      letter-spacing: -0.4px; 
     }
-    
+    h1 { font-size: 22px; }
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .ws-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.12);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+    }
+    .ws-pill.disconnected {
+      background: rgba(239, 68, 68, 0.12);
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .btn-logout {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-logout:hover {
+      background: rgba(239, 68, 68, 0.15);
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.35);
+    }
+
+    /* --- ÉCRAN DE CONNEXION PIN --- */
     #ecran-login {
-      max-width: 350px; 
+      max-width: 380px; 
       margin: 80px auto; 
-      padding: 40px;
+      padding: 40px 32px;
       background: var(--card-bg); 
       backdrop-filter: var(--blur); 
       border: 1px solid var(--card-border);
@@ -61,24 +125,39 @@
       text-align: center; 
       box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
     }
+    .login-logo-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 18px;
+    }
     input[type=password] { 
       width: 100%; 
       padding: 15px; 
       margin-top: 20px;
-      margin-bottom: 20px; 
-      box-sizing: border-box;
-      background: rgba(0,0,0,0.2); 
+      margin-bottom: 14px; 
+      background: rgba(0,0,0,0.3); 
       border: 1px solid var(--card-border); 
       border-radius: 12px;
       color: white; 
-      font-size: 18px; 
+      font-size: 20px; 
+      letter-spacing: 4px;
       text-align: center; 
       outline: none; 
-      transition: border 0.3s;
+      transition: border 0.25s, box-shadow 0.25s;
     }
-    input[type=password]:focus { border-color: var(--accent); }
+    input[type=password]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.2);
+    }
+    .login-error {
+      min-height: 20px;
+      font-size: 13px;
+      color: #f87171;
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
     .btn-login { 
-      background: var(--accent); 
+      background: linear-gradient(135deg, #0ea5e9, #2563eb); 
       color: white; 
       border: none; 
       padding: 15px 30px;
@@ -86,22 +165,30 @@
       font-size: 16px; 
       font-weight: 600; 
       cursor: pointer;
-      transition: background 0.3s, transform 0.1s; 
+      transition: opacity 0.2s, transform 0.1s; 
       width: 100%;
     }
-    .btn-login:hover { background: var(--accent-hover); }
+    .btn-login:hover { opacity: 0.94; }
     .btn-login:active { transform: scale(0.98); }
 
-    #ecran-app { display: none; max-width: 1000px; margin: 0 auto; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-8px); }
+      75% { transform: translateX(8px); }
+    }
+    .shake { animation: shake 0.3s ease-in-out; }
+
+    /* --- CONTENEUR PRINCIPAL --- */
+    #ecran-app { display: none; max-width: 1120px; margin: 0 auto; }
     
     .carte-section { 
       background: var(--card-bg); 
       backdrop-filter: var(--blur); 
       border: 1px solid var(--card-border);
-      border-radius: 20px; 
-      padding: 25px; 
-      margin-bottom: 30px; 
-      box-shadow: 0 10px 30px -5px rgba(0,0,0,0.3);
+      border-radius: 22px; 
+      padding: 26px; 
+      margin-bottom: 28px; 
+      box-shadow: 0 12px 32px -5px rgba(0,0,0,0.35);
     }
     
     .status-bar { 
@@ -110,312 +197,890 @@
       align-items: center; 
       flex-wrap: wrap; 
       gap: 15px;
-      padding-bottom: 20px; 
-      margin-bottom: 20px; 
+      padding-bottom: 18px; 
+      margin-bottom: 22px; 
       border-bottom: 1px solid var(--card-border);
     }
-    .status-title { display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 600; }
+    .status-title {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      font-size: 20px;
+      font-weight: 700;
+    }
     .status-badge { 
-      padding: 6px 12px; border-radius: 20px; font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px;
+      padding: 6px 13px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
-    .online .status-badge { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
-    .offline .status-badge { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+    .online .status-badge { background: rgba(16, 185, 129, 0.12); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.25); }
+    .offline .status-badge { background: rgba(239, 68, 68, 0.12); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.25); }
     
-    .sensor-data { 
-      display: flex; gap: 15px; font-size: 15px; background: rgba(0,0,0,0.3); 
-      padding: 8px 16px; border-radius: 20px; color: var(--text-main); font-weight: 500;
-      border: 1px solid var(--card-border); box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+    .sensor-pills { 
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
     }
-    
-    .container { 
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 15px; 
+    .sensor-pill {
+      font-size: 14px;
+      background: rgba(0,0,0,0.35);
+      padding: 8px 14px;
+      border-radius: 12px;
+      color: var(--text-main);
+      font-weight: 600;
+      border: 1px solid var(--card-border);
     }
-    .dashboard-layout { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
-    .tank-column { width: 80px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+
+    /* --- JAUGE CUVE + GRAPHIQUE --- */
+    .dashboard-layout {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 22px;
+      margin-bottom: 20px;
+    }
+    @media (max-width: 760px) {
+      .dashboard-layout { grid-template-columns: 1fr; }
+    }
+
+    .tank-column {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.22);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 16px 12px;
+    }
+    .tank-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
     .tank-container {
-      width: 60px; height: 180px; background: rgba(255,255,255,0.05); border: 2px solid var(--card-border);
-      border-radius: 30px; position: relative; overflow: hidden; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); margin-bottom: 15px;
+      width: 88px;
+      height: 200px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 2px solid rgba(148, 163, 184, 0.3);
+      border-radius: 26px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: inset 0 0 18px rgba(0,0,0,0.7);
     }
     .tank-fill {
-      position: absolute; bottom: 0; width: 100%; background: linear-gradient(to top, #0ea5e9, #38bdf8);
-      transition: height 1s ease-out; box-shadow: 0 0 15px #38bdf8;
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background: linear-gradient(180deg, #38bdf8 0%, #0284c7 60%, #0369a1 100%);
+      transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.55);
     }
-    .chart-column { flex-grow: 1; min-width: 300px; background: rgba(0,0,0,0.2); border-radius: 15px; padding: 15px; border: 1px solid var(--card-border); min-height: 200px; display: flex; flex-direction: column; }
-    .chart-filters { display: flex; gap: 10px; margin-bottom: 10px; justify-content: flex-end; }
-    .filter-btn { background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--card-border); border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 500; cursor: pointer; transition: 0.2s; }
-    .filter-btn:hover, .filter-btn.active { background: rgba(56, 189, 248, 0.2); color: #38bdf8; border-color: rgba(56, 189, 248, 0.5); }
-    .chart-wrapper { flex-grow: 1; position: relative; }
+    .tank-fill::before {
+      content: "";
+      position: absolute;
+      top: -6px;
+      left: -10%;
+      width: 120%;
+      height: 12px;
+      background: rgba(255, 255, 255, 0.28);
+      border-radius: 50%;
+      animation: wavePulse 3s ease-in-out infinite alternate;
+    }
+    @keyframes wavePulse {
+      0% { transform: translateX(-4px) scaleY(0.8); }
+      100% { transform: translateX(4px) scaleY(1.2); }
+    }
+    .tank-scale {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      height: 186px;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .tank-pct-label {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .tank-cap-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 3px;
+    }
+
+    .chart-column {
+      background: rgba(0,0,0,0.22);
+      border-radius: 18px;
+      padding: 16px;
+      border: 1px solid var(--card-border);
+      min-height: 250px;
+      display: flex;
+      flex-direction: column;
+    }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .chart-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+    .chart-filters { display: flex; gap: 8px; }
+    .filter-btn {
+      background: rgba(255,255,255,0.05);
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .filter-btn:hover, .filter-btn.active {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+      border-color: rgba(56, 189, 248, 0.5);
+    }
+    .chart-wrapper { flex-grow: 1; position: relative; min-height: 195px; }
+    .chart-empty {
+      position: absolute;
+      inset: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 13px;
+      background: rgba(15, 23, 42, 0.45);
+      border-radius: 12px;
+    }
+
+    /* --- PANNEAU INTELLIGENCE MÉTÉO AROME --- */
+    .meteo-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      background: rgba(14, 165, 233, 0.07);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      border-radius: 16px;
+      padding: 14px 18px;
+      margin-bottom: 20px;
+    }
+    .meteo-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 18px;
+      align-items: center;
+      font-size: 13px;
+    }
+    .meteo-metric-item span {
+      color: var(--text-muted);
+      display: block;
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+    .meteo-metric-item strong {
+      font-size: 14px;
+      color: var(--text-main);
+    }
+    .meteo-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .risk-badge {
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .risk-ok {
+      background: rgba(16, 185, 129, 0.14);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .risk-danger {
+      background: rgba(245, 158, 11, 0.18);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .risk-manual {
+      background: rgba(148, 163, 184, 0.15);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.3);
+    }
+    .btn-auto-toggle {
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      transition: 0.2s;
+    }
+    .btn-auto-toggle.off {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      border-color: var(--card-border);
+    }
+
+    /* --- GRILLE DES 4 RELAIS KINCONY B4 --- */
+    .relais-grid { 
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px; 
+    }
     .card { 
-      background: rgba(255,255,255,0.03); border: 1px solid var(--card-border);
-      padding: 20px 15px; border-radius: 16px; text-align: center;
-      transition: transform 0.2s, background 0.3s;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--card-border);
+      padding: 18px 16px;
+      border-radius: 16px;
+      text-align: center;
+      transition: transform 0.2s, background 0.25s, border-color 0.25s;
     }
-    .card:hover { background: rgba(255,255,255,0.06); transform: translateY(-2px); }
+    .card.on {
+      background: rgba(16, 185, 129, 0.08);
+      border-color: rgba(16, 185, 129, 0.35);
+    }
+    .card:hover { transform: translateY(-2px); }
     
     .relais-title { 
-      font-size: 16px; font-weight: 600; color: var(--text-muted); margin-bottom: 15px;
-      display: flex; justify-content: center; align-items: center; gap: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 4px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
     }
-    .indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px currentColor; }
+    .relais-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+    .indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+      box-shadow: 0 0 10px currentColor;
+    }
     .on .indicator { background-color: var(--success); color: var(--success); }
     .off .indicator { background-color: var(--text-muted); color: var(--text-muted); box-shadow: none; }
     
     button.action-btn { 
-      width: 100%; padding: 12px; cursor: pointer; border-radius: 10px; border: none; 
-      font-weight: 600; font-size: 14px; transition: all 0.2s;
+      width: 100%;
+      padding: 11px;
+      cursor: pointer;
+      border-radius: 10px;
+      border: none; 
+      font-weight: 600;
+      font-size: 13px;
+      transition: all 0.2s;
     }
-    .btn-on { background-color: var(--success); color: #fff; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); }
+    .btn-on { background-color: var(--success); color: #fff; box-shadow: 0 4px 14px rgba(16, 185, 129, 0.28); }
     .btn-on:hover { background-color: #059669; }
-    .btn-off { background-color: rgba(255,255,255,0.1); color: var(--text-main); }
-    .btn-off:hover { background-color: rgba(255,255,255,0.2); }
+    .btn-off { background-color: rgba(239, 68, 68, 0.18); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.35); }
+    .btn-off:hover { background-color: rgba(239, 68, 68, 0.28); }
     button:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(1); box-shadow: none; }
+
+    /* --- JOURNAL D'ACTIVITÉ EN DIRECT --- */
+    .logs-section {
+      background: var(--card-bg);
+      backdrop-filter: var(--blur);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 22px;
+      margin-top: 10px;
+    }
+    .logs-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+    }
+    .logs-list {
+      max-height: 240px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+    .log-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      padding: 9px 12px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.25);
+      border-left: 3px solid var(--accent);
+    }
+    .log-item.success { border-left-color: var(--success); }
+    .log-item.warning { border-left-color: var(--warning); }
+    .log-item.danger  { border-left-color: var(--danger); }
+    .log-time {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-family: monospace;
+      white-space: nowrap;
+    }
+    .log-text {
+      color: var(--text-main);
+      flex: 1;
+    }
   </style>
 </head>
 <body>
+
+  <!-- ÉCRAN DE CONNEXION PIN -->
   <div id="ecran-login">
-    <div class="header-bar">
+    <div class="login-logo-wrap">
       <img src="logo.svg" alt="Logo" class="app-logo">
     </div>
-    <h2>🔒 Verrouillage</h2>
-    <input type="password" id="pin-input" placeholder="Code PIN">
+    <h2>🔒 Accès Sécurisé</h2>
+    <p style="color: var(--text-muted); font-size: 13px; margin-top: 8px;">Entrez votre code PIN pour déverrouiller la flotte Eau-Pilot</p>
+    <input type="password" id="pin-input" placeholder="••••" autocomplete="current-password">
+    <div id="login-error" class="login-error"></div>
     <button class="btn-login" onclick="validerPin()">Déverrouiller</button>
   </div>
 
+  <!-- TABLEAU DE BORD PRINCIPAL -->
   <div id="ecran-app">
-    <div class="header-bar">
-      <img src="logo.svg" alt="Logo" class="app-logo">
-      <h1>Flotte Eau-Pilot </h1>
-    </div>
+    <header class="top-nav">
+      <div class="brand-group">
+        <img src="logo.svg" alt="Logo" class="app-logo">
+        <div>
+          <h1>Flotte Eau-Pilot</h1>
+          <div class="brand-subtitle">Supervision Kincony B4 & Prévisions Météo-France AROME</div>
+        </div>
+      </div>
+      <div class="nav-actions">
+        <div id="ws-status-pill" class="ws-pill">🟢 Serveur connecté</div>
+        <button class="btn-logout" onclick="deconnecterSession()">🔒 Verrouiller</button>
+      </div>
+    </header>
+
     <div id="cartes-container">
-      <div style="text-align: center; color: var(--text-muted); height: 100px; display: flex; align-items: center; justify-content: center;">En attente de connexion...</div>
+      <div style="text-align: center; color: var(--text-muted); height: 100px; display: flex; align-items: center; justify-content: center;">
+        Synchronisation des cartes en cours...
+      </div>
     </div>
+
+    <!-- JOURNAL D'ACTIVITÉ EN DIRECT -->
+    <section class="logs-section">
+      <div class="logs-header">
+        <h3 style="font-size: 16px;">📋 Journal d'activité en direct</h3>
+        <span style="font-size: 12px; color: var(--text-muted);">Synchronisé avec Google Sheets</span>
+      </div>
+      <div id="logs-container" class="logs-list">
+        <div style="color: var(--text-muted); font-size: 13px;">Aucun événement récent.</div>
+      </div>
+    </section>
   </div>
 
   <script>
+    // Libellés explicites des 4 relais de la Kincony B4
+    const RELAIS_CONFIG = [
+      { id: 1, titre: "R1 • Vanne Vidange", desc: "Sécurité anti-débordement" },
+      { id: 2, titre: "R2 • Pompe Arrosage", desc: "Circuit jardin extérieur" },
+      { id: 3, titre: "R3 • Surpresseur", desc: "Alimentation réseau eau" },
+      { id: 4, titre: "R4 • Auxiliaire", desc: "Sortie libre programmable" }
+    ];
+
     let codePin = localStorage.getItem("savedPin") || "";
-    
-    // Détection automatique de l'adresse WebSocket (Adapté pour Live Server et Production Render)
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    let wsUrl;
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      if (window.location.port === '5500' || window.location.port === '5501') {
-        // En preview Live Server : connexion vers le serveur Render actif
-        wsUrl = 'wss://serveur-kincony.onrender.com';
-      } else {
-        wsUrl = wsProtocol + '//' + window.location.host;
-      }
-    } else {
-      wsUrl = wsProtocol + '//' + window.location.host;
+    let ws = null;
+    let estAuthentifie = false;
+    const chartsMemory = {};
+    const periodeActiveParCarte = {};
+
+    // Échappement anti-XSS
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
     }
 
-    const ws = new WebSocket(wsUrl);
-    
-    ws.onopen = () => {
-      if (codePin) {
-        document.getElementById('ecran-login').style.display = 'none';
-        document.getElementById('ecran-app').style.display = 'block';
-        ws.send("GET_DASHBOARD"); 
+    // Identifiant DOM propre
+    function safeId(nom) {
+      return String(nom).replace(/[^a-zA-Z0-9_-]/g, '-');
+    }
+
+    // Détection automatique de l'URL WebSocket
+    function obtenirWsUrl() {
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        if (window.location.port === '5500' || window.location.port === '5501') {
+          return 'wss://serveur-kincony.onrender.com';
+        }
       }
-    };
+      return wsProtocol + '//' + window.location.host;
+    }
+
+    function connecterWebSocket() {
+      ws = new WebSocket(obtenirWsUrl());
+
+      ws.onopen = () => {
+        majBadgeConnexionServeur(true);
+        if (codePin) {
+          ws.send("AUTH:" + codePin);
+        }
+      };
+
+      ws.onclose = () => {
+        majBadgeConnexionServeur(false);
+        setTimeout(connecterWebSocket, 4000);
+      };
+
+      ws.onmessage = (event) => {
+        const msg = event.data;
+        if (!msg.startsWith("{")) return;
+        const data = JSON.parse(msg);
+
+        if (data.type === "AUTH_OK") {
+          estAuthentifie = true;
+          localStorage.setItem("savedPin", codePin);
+          document.getElementById('login-error').innerText = "";
+          document.getElementById('ecran-login').style.display = 'none';
+          document.getElementById('ecran-app').style.display = 'block';
+        }
+        else if (data.type === "AUTH_ERROR") {
+          estAuthentifie = false;
+          localStorage.removeItem("savedPin");
+          document.getElementById('ecran-app').style.display = 'none';
+          const loginBox = document.getElementById('ecran-login');
+          loginBox.style.display = 'block';
+          loginBox.classList.remove('shake');
+          void loginBox.offsetWidth;
+          loginBox.classList.add('shake');
+          document.getElementById('login-error').innerText = data.message || "Code PIN incorrect.";
+        }
+        else if (data.type === "AUTH_REQUIRED") {
+          deconnecterSession();
+        }
+        else if (data.type === "UPDATE") {
+          majAffichageCartes(data.liste);
+        }
+        else if (data.type === "HISTORY_DATA") {
+          dessinerGraphique(data.nom, data.points, data.periode, data.capaciteMax, data.cibleMeteo);
+        }
+        else if (data.type === "LOGS_INIT") {
+          afficherLogsInitiaux(data.logs || []);
+        }
+        else if (data.type === "NEW_LOG") {
+          ajouterLogEnDirect(data.log);
+        }
+      };
+    }
+
+    function majBadgeConnexionServeur(connecte) {
+      const pill = document.getElementById('ws-status-pill');
+      if (!pill) return;
+      if (connecte) {
+        pill.className = 'ws-pill';
+        pill.innerText = '🟢 Serveur connecté';
+      } else {
+        pill.className = 'ws-pill disconnected';
+        pill.innerText = '🔴 Reconnexion...';
+      }
+    }
 
     function validerPin() {
-      codePin = document.getElementById('pin-input').value;
-      localStorage.setItem("savedPin", codePin);
-      document.getElementById('ecran-login').style.display = 'none';
-      document.getElementById('ecran-app').style.display = 'block';
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send("GET_DASHBOARD"); 
+      const val = document.getElementById('pin-input').value.trim();
+      if (!val) {
+        document.getElementById('login-error').innerText = "Veuillez saisir votre code PIN.";
+        return;
+      }
+      codePin = val;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send("AUTH:" + codePin);
+      } else {
+        document.getElementById('login-error').innerText = "Connexion au serveur en cours...";
       }
     }
 
-    ws.onmessage = (event) => {
-      const msg = event.data;
-      if (msg.startsWith("{")) {
-          const data = JSON.parse(msg);
-          if (data.type === "UPDATE") majAffichageCartes(data.liste);
-          else if (data.type === "HISTORY_DATA") dessinerGraphique(data.nom, data.points, data.periode);
-      }
-    };
+    document.getElementById('pin-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') validerPin();
+    });
 
-    const chartsMemory = {};
+    function deconnecterSession() {
+      codePin = "";
+      estAuthentifie = false;
+      localStorage.removeItem("savedPin");
+      document.getElementById('pin-input').value = "";
+      document.getElementById('ecran-app').style.display = 'none';
+      document.getElementById('ecran-login').style.display = 'block';
+    }
+
+    function afficherLogsInitiaux(logs) {
+      const container = document.getElementById('logs-container');
+      if (!logs || logs.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 13px;">Aucun événement enregistré pour le moment.</div>';
+        return;
+      }
+      container.innerHTML = logs.map(creerHtmlLog).join('');
+    }
+
+    function ajouterLogEnDirect(log) {
+      if (!log) return;
+      const container = document.getElementById('logs-container');
+      if (container.innerHTML.includes("Aucun événement")) {
+        container.innerHTML = "";
+      }
+      container.insertAdjacentHTML('afterbegin', creerHtmlLog(log));
+    }
+
+    function creerHtmlLog(log) {
+      const niveau = ['info', 'success', 'warning', 'danger'].includes(log.niveau) ? log.niveau : 'info';
+      return `<div class="log-item ${niveau}">
+        <span class="log-time">${escapeHtml(log.dateFR || '')}</span>
+        <span class="log-text">${escapeHtml(log.texte || '')}</span>
+      </div>`;
+    }
 
     function majAffichageCartes(listeCartes) {
-      if (listeCartes.length === 0) {
-          document.getElementById('cartes-container').innerHTML = "<div style='text-align: center; color: var(--text-muted);'>Aucune carte n'est actuellement détectée.</div>";
-          return;
+      const container = document.getElementById('cartes-container');
+      if (!listeCartes || listeCartes.length === 0) {
+        container.innerHTML = "<div style='text-align: center; color: var(--text-muted); padding: 40px;'>Aucune carte Kincony B4 n'est actuellement détectée.</div>";
+        return;
       }
 
-      let container = document.getElementById('cartes-container');
-      if (container.innerHTML.includes("Aucune carte") || container.innerHTML.includes("En attente")) {
-          container.innerHTML = "";
+      if (container.innerHTML.includes("Aucune carte") || container.innerHTML.includes("Synchronisation")) {
+        container.innerHTML = "";
       }
 
       listeCartes.forEach(carte => {
-        const safeNom = carte.nom.replace(/_/g, '-');
-        const carteId = 'carte-ui-' + safeNom;
+        const sId = safeId(carte.nom);
+        const carteId = 'carte-ui-' + sId;
         let el = document.getElementById(carteId);
         
         if (!el) {
-           const statusClass = carte.enLigne ? "online" : "offline";
-           const statusIcon = carte.enLigne ? "🟢" : "🔴";
-           const statusText = carte.enLigne ? "En ligne" : "Hors ligne";
-           const nomPropre = carte.nom.replace(/_/g, ' ');
-           
-           let relaisHtml = '';
-           for(let i=1; i<=6; i++) {
-              relaisHtml += '<div class="card off" id="r-card-' + safeNom + '-' + i + '">' +
-                '<div class="relais-title"><span class="indicator"></span> R' + i + '</div>' +
-                '<button id="r-btn-' + safeNom + '-' + i + '" class="action-btn btn-on" onclick="envoyerOrdre(\'' + carte.nom + '\', \'' + i + '\', \'ON\')">Activer</button>' +
-              '</div>';
-           }
-           
-           let newCarteTemplate = document.createElement("div");
-           newCarteTemplate.id = carteId;
-           newCarteTemplate.className = 'carte-section ' + statusClass;
-           newCarteTemplate.innerHTML = 
-             '<div class="status-bar">' +
-               '<div class="status-title">' + nomPropre + ' <span class="status-badge" id="status-' + safeNom + '">' + statusIcon + ' ' + statusText + '</span></div>' + 
-               '<div class="sensor-data"><span id="vol-' + safeNom + '">💧 0 L</span><span id="pct-' + safeNom + '">📊 0.0%</span><span id="meteo-' + safeNom + '" style="color:#60a5fa;">🌧️ -- mm ()</span></div>' +
-             '</div>' +
-             '<div class="dashboard-layout">' +
-               '<div class="tank-column">' +
-                  '<div class="tank-container"><div class="tank-fill" id="fill-' + safeNom + '" style="height: 0%;"></div></div>' +
-                  '<div style="font-weight:bold;color:#38bdf8;" id="filltext-' + safeNom + '">0.0%</div>' +
-               '</div>' +
-               '<div class="chart-column">' +
-                  '<div class="chart-filters">' +
-                      '<button class="filter-btn active" onclick="demanderHistorique(\'' + carte.nom + '\', \'1d\', this)">1 Jour</button>' +
-                      '<button class="filter-btn" onclick="demanderHistorique(\'' + carte.nom + '\', \'1w\', this)">1 Sem.</button>' +
-                      '<button class="filter-btn" onclick="demanderHistorique(\'' + carte.nom + '\', \'1m\', this)">1 Mois</button>' +
-                  '</div>' +
-                  '<div class="chart-wrapper"><canvas id="chart-' + carte.nom + '"></canvas></div>' +
-               '</div>' +
-             '</div>' +
-             '<div class="container">' + relaisHtml + '</div>';
-             
-           container.appendChild(newCarteTemplate);
-           demanderHistorique(carte.nom, '1d', null);
-        } 
-        
-        el = document.getElementById(carteId);
-        if (el) {
-           const statLabel = carte.enLigne ? "🟢 En ligne" : "🔴 Hors ligne";
-           document.getElementById('status-' + safeNom).innerHTML = statLabel;
-           if (carte.enLigne) el.className = 'carte-section online';
-           else el.className = 'carte-section offline';
+          const nomPropre = escapeHtml(carte.nom.replace(/_/g, ' '));
+          
+          let relaisHtml = '';
+          RELAIS_CONFIG.forEach(r => {
+            relaisHtml += `
+              <div class="card off" id="r-card-${sId}-${r.id}">
+                <div class="relais-title"><span class="indicator"></span> ${r.titre}</div>
+                <div class="relais-sub">${r.desc}</div>
+                <button id="r-btn-${sId}-${r.id}" class="action-btn btn-on"></button>
+              </div>`;
+          });
+          
+          const newCarte = document.createElement("div");
+          newCarte.id = carteId;
+          newCarte.className = 'carte-section';
+          newCarte.innerHTML = `
+            <div class="status-bar">
+              <div class="status-title">
+                <span>${nomPropre}</span>
+                <span class="status-badge" id="status-${sId}"></span>
+              </div>
+              <div class="sensor-pills">
+                <span class="sensor-pill" id="vol-${sId}">💧 -- L</span>
+                <span class="sensor-pill" id="pct-${sId}">📊 --%</span>
+                <span class="sensor-pill" id="meteo-${sId}" style="color:#38bdf8;">🌧️ -- mm (48h)</span>
+              </div>
+            </div>
 
-           if (carte.volume !== null && carte.pourcentage !== null) {
-               document.getElementById('vol-' + safeNom).innerText = '💧 ' + carte.volume + ' L';
-               document.getElementById('pct-' + safeNom).innerText = '📊 ' + carte.pourcentage + '%';
-               if (carte.pluie !== undefined) document.getElementById('meteo-' + safeNom).innerText = '🌧️ ' + carte.pluie + ' mm (48h)';
+            <div class="meteo-panel">
+              <div class="meteo-metrics">
+                <div class="meteo-metric-item">
+                  <span>Surface de collecte</span>
+                  <strong id="surf-${sId}">-- m²</strong>
+                </div>
+                <div class="meteo-metric-item">
+                  <span>Apport pluie prévu (48h)</span>
+                  <strong id="apport-${sId}">-- L</strong>
+                </div>
+                <div class="meteo-metric-item">
+                  <span>Capacité disponible</span>
+                  <strong id="libre-${sId}">-- L libres</strong>
+                </div>
+              </div>
+              <div class="meteo-actions">
+                <span id="risk-badge-${sId}" class="risk-badge risk-ok">Analyse en cours...</span>
+                <button id="auto-btn-${sId}" class="btn-auto-toggle"></button>
+              </div>
+            </div>
 
-               document.getElementById('fill-' + safeNom).style.height = carte.pourcentage + '%';
-               document.getElementById('filltext-' + safeNom).innerText = carte.pourcentage + '%';
-               
-               majDernierPointGraphique(carte.nom, carte.volume);
-           }
-           
-           for(let i=1; i<=6; i++) {
-              const estOn = (carte.etat & (1 << (i-1)));
-              const rCard = document.getElementById('r-card-' + safeNom + '-' + i);
-              const rBtn = document.getElementById('r-btn-' + safeNom + '-' + i);
-              if (!carte.enLigne) rBtn.setAttribute('disabled', 'true');
-              else rBtn.removeAttribute('disabled');
-              
-              if (estOn) {
-                  rCard.className = 'card on';
-                  rBtn.className = 'action-btn btn-off';
-                  rBtn.innerText = 'Désactiver';
-                  rBtn.setAttribute('onclick', 'envoyerOrdre(\'' + carte.nom + '\', \'' + i + '\', \'OFF\')');
-              } else {
-                  rCard.className = 'card off';
-                  rBtn.className = 'action-btn btn-on';
-                  rBtn.innerText = 'Activer';
-                  rBtn.setAttribute('onclick', 'envoyerOrdre(\'' + carte.nom + '\', \'' + i + '\', \'ON\')');
-              }
-           }
+            <div class="dashboard-layout">
+              <div class="tank-column">
+                <div class="tank-wrapper">
+                  <div class="tank-container">
+                    <div class="tank-fill" id="fill-${sId}" style="height: 0%;"></div>
+                  </div>
+                  <div class="tank-scale">
+                    <span>100%</span>
+                    <span>75%</span>
+                    <span>50%</span>
+                    <span>25%</span>
+                    <span>0%</span>
+                  </div>
+                </div>
+                <div class="tank-pct-label" id="filltext-${sId}">0.0%</div>
+                <div class="tank-cap-label" id="captext-${sId}">0 L / 3000 L</div>
+              </div>
+
+              <div class="chart-column">
+                <div class="chart-header">
+                  <span class="chart-title">Historique du volume d'eau (Litres)</span>
+                  <div class="chart-filters" id="filters-${sId}">
+                    <button class="filter-btn active" data-periode="1d">24 Heures</button>
+                    <button class="filter-btn" data-periode="1w">7 Jours</button>
+                    <button class="filter-btn" data-periode="1m">30 Jours</button>
+                  </div>
+                </div>
+                <div class="chart-wrapper">
+                  <canvas id="chart-${sId}"></canvas>
+                  <div id="chart-empty-${sId}" class="chart-empty">En attente de points d'historique sur cette période...</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="relais-grid">${relaisHtml}</div>
+          `;
+          
+          container.appendChild(newCarte);
+
+          // Attacher les événements de filtre graphique
+          const filterContainer = document.getElementById(`filters-${sId}`);
+          filterContainer.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              demanderHistorique(carte.nom, btn.getAttribute('data-periode'), btn);
+            });
+          });
+
+          // Attacher le bouton Mode Auto Météo
+          document.getElementById(`auto-btn-${sId}`).addEventListener('click', () => {
+            basculerModeAuto(carte.nom);
+          });
+
+          periodeActiveParCarte[carte.nom] = '1d';
+          demanderHistorique(carte.nom, '1d', null);
         }
+
+        // Mise à jour dynamique des données de la carte
+        el = document.getElementById(carteId);
+        el.className = 'carte-section ' + (carte.enLigne ? 'online' : 'offline');
+        document.getElementById(`status-${sId}`).innerText = carte.enLigne ? "🟢 En ligne" : "🔴 Hors ligne";
+
+        const capMax = carte.capaciteMax || 3000;
+        const volActuel = carte.volume !== null && carte.volume !== undefined ? Math.round(carte.volume) : 0;
+        const pctActuel = carte.pourcentage !== null && carte.pourcentage !== undefined ? parseFloat(carte.pourcentage).toFixed(1) : "0.0";
+
+        if (carte.volume !== null && carte.pourcentage !== null) {
+          document.getElementById(`vol-${sId}`).innerText = `💧 ${volActuel} L`;
+          document.getElementById(`pct-${sId}`).innerText = `📊 ${pctActuel}%`;
+          document.getElementById(`fill-${sId}`).style.height = `${Math.min(100, Math.max(0, carte.pourcentage))}%`;
+          document.getElementById(`filltext-${sId}`).innerText = `${pctActuel}%`;
+          document.getElementById(`captext-${sId}`).innerText = `${volActuel} L / ${capMax} L`;
+          majDernierPointGraphique(carte.nom, carte.volume);
+        }
+
+        if (carte.pluie !== undefined && carte.pluie !== null) {
+          document.getElementById(`meteo-${sId}`).innerText = `🌧️ ${carte.pluie} mm (48h)`;
+        }
+
+        // Métriques Météo AROME
+        document.getElementById(`surf-${sId}`).innerText = `${carte.surface || 100} m²`;
+        document.getElementById(`apport-${sId}`).innerText = carte.pluieLitrePrevu !== null && carte.pluieLitrePrevu !== undefined
+          ? `+${carte.pluieLitrePrevu} L attendus`
+          : `-- L`;
+        document.getElementById(`libre-${sId}`).innerText = carte.espaceLibre !== undefined
+          ? `${carte.espaceLibre} L libres`
+          : `-- L libres`;
+
+        const riskBadge = document.getElementById(`risk-badge-${sId}`);
+        const autoBtn = document.getElementById(`auto-btn-${sId}`);
+
+        if (!carte.modeAutoMeteo) {
+          riskBadge.className = 'risk-badge risk-manual';
+          riskBadge.innerText = '⚪ Mode Manuel actif';
+          autoBtn.className = 'btn-auto-toggle off';
+          autoBtn.innerText = '🤖 Auto Météo : OFF';
+        } else {
+          autoBtn.className = 'btn-auto-toggle';
+          autoBtn.innerText = '🤖 Auto Météo : ON';
+          if (carte.cibleMeteo !== null && carte.cibleMeteo !== undefined) {
+            riskBadge.className = 'risk-badge risk-danger';
+            riskBadge.innerText = `🟠 Vidange préventive (Cible : ${carte.cibleMeteo} L)`;
+          } else if (carte.risqueDebordement) {
+            riskBadge.className = 'risk-badge risk-danger';
+            riskBadge.innerText = `🟠 Risque de surplus détecté`;
+          } else {
+            riskBadge.className = 'risk-badge risk-ok';
+            riskBadge.innerText = `🟢 Aucun risque de débordement`;
+          }
+        }
+
+        // Mise à jour des 4 relais Kincony B4
+        RELAIS_CONFIG.forEach(r => {
+          const estOn = (carte.etat & (1 << (r.id - 1))) !== 0;
+          const rCard = document.getElementById(`r-card-${sId}-${r.id}`);
+          const rBtn = document.getElementById(`r-btn-${sId}-${r.id}`);
+          if (!rCard || !rBtn) return;
+
+          rBtn.disabled = !carte.enLigne;
+          if (estOn) {
+            rCard.className = 'card on';
+            rBtn.className = 'action-btn btn-off';
+            rBtn.innerText = 'Désactiver';
+            rBtn.onclick = () => envoyerOrdre(carte.nom, r.id, 'OFF');
+          } else {
+            rCard.className = 'card off';
+            rBtn.className = 'action-btn btn-on';
+            rBtn.innerText = 'Activer';
+            rBtn.onclick = () => envoyerOrdre(carte.nom, r.id, 'ON');
+          }
+        });
       });
     }
 
     function demanderHistorique(nom, periode, boutonDOM) {
-        if (boutonDOM) {
-           const parent = boutonDOM.parentNode;
-           const boutons = parent.querySelectorAll('.filter-btn');
-           boutons.forEach(b => b.classList.remove('active'));
-           boutonDOM.classList.add('active');
-        }
-        if (ws.readyState === WebSocket.OPEN) {
-            ws.send("GET_CHART_HISTORY-" + nom + "-" + periode);
-        }
+      periodeActiveParCarte[nom] = periode;
+      if (boutonDOM) {
+        const parent = boutonDOM.parentNode;
+        parent.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        boutonDOM.classList.add('active');
+      }
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send("GET_CHART_HISTORY-" + nom + "-" + periode);
+      }
+    }
+
+    function basculerModeAuto(nomCarte) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send("TOGGLE_AUTO:" + nomCarte);
+      }
     }
 
     function majDernierPointGraphique(nom, volume) {
-        if (chartsMemory[nom]) {
-            const timeLbl = new Date().toLocaleTimeString('fr-FR').substring(0, 5);
-            const len = chartsMemory[nom].data.labels.length;
-            if (len > 0) {
-                const lastLbl = chartsMemory[nom].data.labels[len - 1];
-                if (lastLbl !== timeLbl) {
-                    chartsMemory[nom].data.labels.push(timeLbl);
-                    chartsMemory[nom].data.datasets[0].data.push(volume);
-                    chartsMemory[nom].update('none');
-                }
-            }
+      const sId = safeId(nom);
+      const chart = chartsMemory[sId];
+      if (chart && periodeActiveParCarte[nom] === '1d') {
+        const timeLbl = new Date().toLocaleTimeString('fr-FR').substring(0, 5);
+        const len = chart.data.labels.length;
+        if (len === 0 || chart.data.labels[len - 1] !== timeLbl) {
+          chart.data.labels.push(timeLbl);
+          chart.data.datasets[0].data.push(volume);
+          if (chart.data.datasets[1]) {
+            chart.data.datasets[1].data.push(chart.capaciteMaxRef || 3000);
+          }
+          document.getElementById(`chart-empty-${sId}`).style.display = 'none';
+          chart.update('none');
         }
+      }
     }
 
-    function dessinerGraphique(nom, historiqueRecu, periodeChoisie) {
-       const ctx = document.getElementById('chart-' + nom);
-       if(!ctx) return;
-       
-       const dataPoints = historiqueRecu.map(h => h.volume);
-       const labels = historiqueRecu.map(h => {
-           const d = new Date(h.time);
-           if (periodeChoisie === '1d' || periodeChoisie === '1h') return d.toLocaleTimeString('fr-FR').substring(0, 5);
-           return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'}).replace(",", " -");
-       });
+    function dessinerGraphique(nom, historiqueRecu, periodeChoisie, capaciteMax = 3000, cibleMeteo = null) {
+      const sId = safeId(nom);
+      const ctx = document.getElementById('chart-' + sId);
+      const emptyOverlay = document.getElementById('chart-empty-' + sId);
+      if (!ctx) return;
 
-       if(chartsMemory[nom]) chartsMemory[nom].destroy();
-       
-       const timeLineDesc = (periodeChoisie==='1d') ? "Dernières 24h" : (periodeChoisie==='1w') ? "Derniers 7 Jours" : "Dernier Mois";
+      if (!historiqueRecu || historiqueRecu.length === 0) {
+        if (emptyOverlay) emptyOverlay.style.display = 'flex';
+      } else {
+        if (emptyOverlay) emptyOverlay.style.display = 'none';
+      }
 
-       chartsMemory[nom] = new Chart(ctx, {
-           type: 'line',
-           data: {
-               labels: labels,
-               datasets: [{
-                   label: 'Volume (Litres) - ' + timeLineDesc,
-                   data: dataPoints,
-                   borderColor: '#38bdf8',
-                   backgroundColor: 'rgba(56, 189, 248, 0.2)',
-                   fill: true,
-                   tension: 0.4,
-                   pointRadius: (periodeChoisie === '1d') ? 0 : 2
-               }]
-           },
-           options: {
-               responsive: true,
-               maintainAspectRatio: false,
-               animation: { duration: 600 },
-               plugins: {
-                   legend: { labels: { color: '#f8fafc', font: { size: 14 } } }
-               },
-               scales: {
-                   x: { ticks: { color: '#94a3b8', maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                   y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.1)' }, min: 0 }
-               }
-           }
-       });
+      const dataPoints = (historiqueRecu || []).map(h => h.volume);
+      const labels = (historiqueRecu || []).map(h => {
+        const d = new Date(h.time);
+        if (periodeChoisie === '1d') return d.toLocaleTimeString('fr-FR').substring(0, 5);
+        return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(",", " •");
+      });
+
+      if (chartsMemory[sId]) chartsMemory[sId].destroy();
+
+      const timeLineDesc = (periodeChoisie === '1d') ? "24h" : (periodeChoisie === '1w') ? "7 Jours" : "30 Jours";
+
+      const datasets = [
+        {
+          label: `Volume d'eau (${timeLineDesc})`,
+          data: dataPoints,
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.18)',
+          fill: true,
+          tension: 0.35,
+          pointRadius: (periodeChoisie === '1d') ? 0 : 2
+        },
+        {
+          label: `Capacité Max (${capaciteMax} L)`,
+          data: dataPoints.map(() => capaciteMax),
+          borderColor: 'rgba(239, 68, 68, 0.55)',
+          borderDash: [6, 6],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false
+        }
+      ];
+
+      if (cibleMeteo !== null && cibleMeteo !== undefined) {
+        datasets.push({
+          label: `Cible Vidange Météo (${Math.round(cibleMeteo)} L)`,
+          data: dataPoints.map(() => Math.round(cibleMeteo)),
+          borderColor: 'rgba(245, 158, 11, 0.8)',
+          borderDash: [4, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false
+        });
+      }
+
+      chartsMemory[sId] = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: 450 },
+          plugins: {
+            legend: { labels: { color: '#cbd5e1', font: { size: 12 }, boxWidth: 14 } }
+          },
+          scales: {
+            x: { ticks: { color: '#94a3b8', maxTicksLimit: 10 }, grid: { color: 'rgba(255,255,255,0.04)' } },
+            y: { ticks: { color: '#94a3b8' }, grid: { color: 'rgba(255,255,255,0.08)' }, min: 0, suggestedMax: capaciteMax + 200 }
+          }
+        }
+      });
+      chartsMemory[sId].capaciteMaxRef = capaciteMax;
     }
 
     function envoyerOrdre(nomCarte, numeroRelais, action) { 
-      if(ws.readyState === WebSocket.OPEN) {
-          ws.send(codePin + "-" + nomCarte + "-R" + numeroRelais + "_" + action); 
-      } else {
-          alert("Déconnecté du serveur !");
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(codePin + "-" + nomCarte + "-R" + numeroRelais + "_" + action); 
       }
     }
+
+    // Démarrage initial de la connexion WebSocket
+    connecterWebSocket();
   </script>
 </body>
 </html>
