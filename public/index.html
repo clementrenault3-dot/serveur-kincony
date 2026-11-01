@@ -96,7 +96,7 @@
       color: var(--danger);
       border-color: rgba(239, 68, 68, 0.3);
     }
-    .btn-logout {
+    .btn-logout, .btn-purge {
       background: rgba(255, 255, 255, 0.06);
       color: var(--text-muted);
       border: 1px solid var(--card-border);
@@ -107,10 +107,25 @@
       cursor: pointer;
       transition: 0.2s;
     }
-    .btn-logout:hover {
+    .btn-logout:hover, .btn-purge:hover {
       background: rgba(239, 68, 68, 0.15);
       color: #fca5a5;
       border-color: rgba(239, 68, 68, 0.35);
+    }
+    .btn-delete-card {
+      background: rgba(239, 68, 68, 0.12);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      padding: 5px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .btn-delete-card:hover {
+      background: rgba(239, 68, 68, 0.28);
+      color: #fff;
     }
 
     /* --- ÉCRAN DE CONNEXION PIN --- */
@@ -579,6 +594,7 @@
       </div>
       <div class="nav-actions">
         <div id="ws-status-pill" class="ws-pill">🟢 Serveur connecté</div>
+        <button class="btn-purge" onclick="purgerCartesHorsLigne()" title="Retirer toutes les anciennes cartes hors-ligne">🧹 Purger hors-ligne</button>
         <button class="btn-logout" onclick="deconnecterSession()">🔒 Verrouiller</button>
       </div>
     </header>
@@ -774,6 +790,19 @@
         container.innerHTML = "";
       }
 
+      // Supprimer du DOM les cartes qui ont été purgées côté serveur
+      const idsPresents = new Set(listeCartes.map(c => 'carte-ui-' + safeId(c.nom)));
+      container.querySelectorAll('.carte-section').forEach(section => {
+        if (!idsPresents.has(section.id)) {
+          const sId = section.id.replace('carte-ui-', '');
+          if (chartsMemory[sId]) {
+            chartsMemory[sId].destroy();
+            delete chartsMemory[sId];
+          }
+          section.remove();
+        }
+      });
+
       listeCartes.forEach(carte => {
         const sId = safeId(carte.nom);
         const carteId = 'carte-ui-' + sId;
@@ -800,6 +829,7 @@
               <div class="status-title">
                 <span>${nomPropre}</span>
                 <span class="status-badge" id="status-${sId}"></span>
+                <button class="btn-delete-card" id="del-btn-${sId}" style="display:none;">🗑️ Retirer</button>
               </div>
               <div class="sensor-pills">
                 <span class="sensor-pill" id="vol-${sId}">💧 -- L</span>
@@ -881,6 +911,11 @@
             basculerModeAuto(carte.nom);
           });
 
+          // Attacher le bouton de suppression de carte
+          document.getElementById(`del-btn-${sId}`).addEventListener('click', () => {
+            supprimerCarte(carte.nom);
+          });
+
           periodeActiveParCarte[carte.nom] = '1d';
           demanderHistorique(carte.nom, '1d', null);
         }
@@ -889,6 +924,8 @@
         el = document.getElementById(carteId);
         el.className = 'carte-section ' + (carte.enLigne ? 'online' : 'offline');
         document.getElementById(`status-${sId}`).innerText = carte.enLigne ? "🟢 En ligne" : "🔴 Hors ligne";
+        const delBtn = document.getElementById(`del-btn-${sId}`);
+        if (delBtn) delBtn.style.display = carte.enLigne ? 'none' : 'inline-block';
 
         const capMax = carte.capaciteMax || 3000;
         const volActuel = carte.volume !== null && carte.volume !== undefined ? Math.round(carte.volume) : 0;
@@ -977,6 +1014,18 @@
     function basculerModeAuto(nomCarte) {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send("TOGGLE_AUTO:" + nomCarte);
+      }
+    }
+
+    function supprimerCarte(nomCarte) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send("DELETE_CARD:" + nomCarte);
+      }
+    }
+
+    function purgerCartesHorsLigne() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send("PURGE_OFFLINE");
       }
     }
 
